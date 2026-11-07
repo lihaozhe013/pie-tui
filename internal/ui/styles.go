@@ -31,20 +31,20 @@ type theme struct {
 
 func defaultTheme() theme {
 	return theme{
-		Base:        lipgloss.AdaptiveColor{Light: "#2B2B33", Dark: "#D5D6DB"},
-		Muted:       lipgloss.AdaptiveColor{Light: "#5F6068", Dark: "#8A8B94"},
-		Faint:       lipgloss.AdaptiveColor{Light: "#84858D", Dark: "#5C5D66"},
+		Base:        lipgloss.AdaptiveColor{Light: "#2B2B33", Dark: "#E4E5E9"},
+		Muted:       lipgloss.AdaptiveColor{Light: "#5F6068", Dark: "#999AA3"},
+		Faint:       lipgloss.AdaptiveColor{Light: "#84858D", Dark: "#6B6C75"},
 		Accent:      lipgloss.AdaptiveColor{Light: "#4F85D1", Dark: "#8BB9FA"},
 		AccentSoft:  lipgloss.AdaptiveColor{Light: "#638EC9", Dark: "#6F9AD6"},
 		User:        lipgloss.AdaptiveColor{Light: "#1667A8", Dark: "#9AD1FF"},
 		Assistant:   lipgloss.AdaptiveColor{Light: "#2B2B33", Dark: "#D5D6DB"},
 		Thinking:    lipgloss.AdaptiveColor{Light: "#6B6C74", Dark: "#8A8B94"},
 		Tool:        lipgloss.AdaptiveColor{Light: "#4F85D1", Dark: "#A9C7F0"},
-		Success:     lipgloss.AdaptiveColor{Light: "#1F7A45", Dark: "#8BD5A4"},
+		Success:     lipgloss.AdaptiveColor{Light: "#1A7F37", Dark: "#7EE787"},
 		Warn:        lipgloss.AdaptiveColor{Light: "#8A5B00", Dark: "#E4C07A"},
-		Danger:      lipgloss.AdaptiveColor{Light: "#B02A2A", Dark: "#F08A8A"},
-		DiffAdd:     lipgloss.AdaptiveColor{Light: "#1F7A45", Dark: "#8BD5A4"},
-		DiffDel:     lipgloss.AdaptiveColor{Light: "#B02A2A", Dark: "#F08A8A"},
+		Danger:      lipgloss.AdaptiveColor{Light: "#CF222E", Dark: "#FF7B72"},
+		DiffAdd:     lipgloss.AdaptiveColor{Light: "#1A7F37", Dark: "#7EE787"},
+		DiffDel:     lipgloss.AdaptiveColor{Light: "#CF222E", Dark: "#FF7B72"},
 		Border:      lipgloss.AdaptiveColor{Light: "#C6C7CE", Dark: "#33343D"},
 		Panel:       lipgloss.AdaptiveColor{Light: "#F2F2F5", Dark: "#1C1D24"},
 		Activity:    lipgloss.AdaptiveColor{Light: "#1667D8", Dark: "#5AA9FF"},
@@ -70,6 +70,7 @@ type styles struct {
 	toolLine        lipgloss.Style
 	toolName        lipgloss.Style
 	toolMeta        lipgloss.Style
+	faint           lipgloss.Style
 	thinkingHead    lipgloss.Style
 	thinkingBody    lipgloss.Style
 	notice          lipgloss.Style
@@ -113,7 +114,8 @@ func newStyles(t theme) styles {
 		assistantPrefix: lipgloss.NewStyle().Foreground(t.Accent).Bold(true),
 		toolLine:        lipgloss.NewStyle().Foreground(t.Muted),
 		toolName:        lipgloss.NewStyle().Foreground(t.Tool),
-		toolMeta:        lipgloss.NewStyle().Foreground(t.Faint),
+		toolMeta:        lipgloss.NewStyle().Foreground(t.Base),
+		faint:           lipgloss.NewStyle().Foreground(t.Faint),
 		thinkingHead:    lipgloss.NewStyle().Foreground(t.Thinking).Italic(true),
 		thinkingBody:    lipgloss.NewStyle().Foreground(t.Thinking).Italic(true),
 		notice:          lipgloss.NewStyle().Foreground(t.Warn),

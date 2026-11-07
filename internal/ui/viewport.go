@@ -373,7 +373,7 @@ func (t *transcript) renderTool(b *block, width int) string {
 	wrapped := t.styles.toolMeta.Width(width - 2).Render(strings.Join(lines, "\n"))
 	out := head + "\n" + indentLines(wrapped, "  ")
 	if truncated {
-		out += "\n  " + t.styles.toolMeta.Render("… press ctrl+o to expand")
+		out += "\n  " + t.styles.faint.Render("… press ctrl+o to expand")
 	}
 	return out
 }
@@ -381,7 +381,7 @@ func (t *transcript) renderTool(b *block, width int) string {
 func (t *transcript) renderDiffBlock(b *block, width int) string {
 	head := t.styles.toolName.Render("● " + b.title)
 	if b.meta != "" {
-		head += " " + t.styles.diffMeta.Render(b.meta)
+		head += " " + t.renderDiffMeta(b.meta)
 	}
 	if b.collapsed || strings.TrimSpace(b.body) == "" {
 		return head
@@ -402,6 +402,23 @@ func (t *transcript) renderDiffBlock(b *block, width int) string {
 		out.WriteString(style.Render(clip.Render(line)))
 	}
 	return out.String()
+}
+
+// renderDiffMeta colors the counts in a diff summary such as "+12 -3
+// (truncated)": added lines green, removed lines red, anything else dim.
+func (t *transcript) renderDiffMeta(meta string) string {
+	parts := strings.Fields(meta)
+	for i, part := range parts {
+		switch {
+		case strings.HasPrefix(part, "+") && len(part) > 1:
+			parts[i] = t.styles.diffAdd.Render(part)
+		case strings.HasPrefix(part, "-") && len(part) > 1:
+			parts[i] = t.styles.diffDel.Render(part)
+		default:
+			parts[i] = t.styles.diffMeta.Render(part)
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 func renderNotice(text string, width int, style lipgloss.Style) string {
