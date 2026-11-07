@@ -186,6 +186,23 @@ func (m *Model) openMCPAddInput(local bool) tea.Cmd {
 }
 
 func (m *Model) openMCPServer(server config.MCPServer, scope string) tea.Cmd {
+	if scope == "project" {
+		if err := m.projectWriteRefusal(true); err != nil {
+			tab := settingsTab{ID: "mcp-server", Label: "Server", Note: server.Name}
+			tab.Rows = []settingsRow{
+				{ID: "mcp-name", Label: "Name", Kind: settingsInfo, Current: func() string { return server.Name }},
+				{ID: "mcp-scope", Label: "Scope", Kind: settingsInfo, Current: func() string { return "project" }},
+				{ID: "mcp-trust", Label: "Status", Kind: settingsInfo, Current: func() string { return "read only" }, Help: err.Error()},
+				{ID: "mcp-back", Label: "Back", Kind: settingsAction, Run: func(m *Model, s *settingsState) tea.Cmd {
+					return m.openSettingsAt("mcp")
+				}},
+			}
+			panel := newSettingsPanel("Server · "+server.Name, []settingsTab{tab})
+			m.settingsPanel = panel
+			m.openOverlay(&overlay{kind: overlaySettings, action: "mcp-detail", settings: panel})
+			return nil
+		}
+	}
 	enabled := server.Enabled
 	exposure := server.Exposure
 	if exposure == "" {
@@ -383,6 +400,12 @@ func (m *Model) runMCPCommand(run func(context.Context, string, string) (string,
 }
 
 func (m *Model) addMCP(arguments string, local bool) tea.Cmd {
+	if local {
+		if err := m.projectWriteRefusal(true); err != nil {
+			m.setToast(err.Error())
+			return nil
+		}
+	}
 	fields := strings.Fields(arguments)
 	if len(fields) == 0 {
 		m.setToast("server arguments are required")

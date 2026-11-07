@@ -84,7 +84,10 @@ panel or General to apply.
 Reads and writes `mcp.json` and a trusted project `.pi/mcp.json`. Servers show
 transport, exposure, enabled state, and env/header names with values masked.
 Connection checks use `pi mcp list --json`; add, login, logout, and remove use
-the matching `pi mcp` commands so validation stays identical to Pie.
+the matching `pi mcp` commands so validation stays identical to Pie. Project
+servers are read-only without an explicit trust decision for the folder, and a
+project package can only be changed once its resources are trusted; the TUI
+reads the nearest decision from `trust.json`, inherited from a parent folder.
 
 ## Goal
 

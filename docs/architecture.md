@@ -183,6 +183,12 @@ remain, so pi's defaults are not read as "no tools". `codemode.mode` and
 `codemode.inlineBudget` are edited in place, with "on" and a blank budget
 deleting the key because those are pi's defaults.
 
+Project writes are trust-gated. `internal/config/trust.go` reads pi's
+`trust.json` and resolves the nearest decision, including inheritance from a
+parent folder. MCP writes need an explicit decision even when the folder has no
+project resources; plugin writes accept a fresh folder and require trust once
+project resources exist.
+
 Plugins are the `packages` array in `settings.json` and in the project's
 `.pi/settings.json`. A string entry is enabled; an object whose four resource
 lists are all empty is disabled. Disabling a filtered entry is refused because

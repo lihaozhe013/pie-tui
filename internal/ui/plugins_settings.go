@@ -148,6 +148,9 @@ func (m *Model) openPackageDetail(entry config.Package, scope string) tea.Cmd {
 	armed := false
 	setDisabled := func(value bool) error {
 		if scope == "project" {
+			if err := m.projectWriteRefusal(false); err != nil {
+				return err
+			}
 			settings := m.projectSettings()
 			if settings == nil {
 				return fmt.Errorf("cannot read .pi/settings.json")
@@ -197,6 +200,12 @@ func (m *Model) openPackageDetail(entry config.Package, scope string) tea.Cmd {
 			Kind:  settingsAction,
 			Help:  "Runs pi update --extension <source>.",
 			Run: func(m *Model, s *settingsState) tea.Cmd {
+				if scope == "project" {
+					if err := m.projectWriteRefusal(false); err != nil {
+						s.err = err.Error()
+						return nil
+					}
+				}
 				m.setToast("updating " + entry.Source + "…")
 				return m.runPiCommand([]string{"update", "--extension", entry.Source}, "updated "+entry.Source)
 			},
@@ -211,6 +220,12 @@ func (m *Model) openPackageDetail(entry config.Package, scope string) tea.Cmd {
 					armed = true
 					s.notice = "press enter again to remove " + entry.Source
 					return nil
+				}
+				if scope == "project" {
+					if err := m.projectWriteRefusal(false); err != nil {
+						s.err = err.Error()
+						return nil
+					}
 				}
 				args := []string{"remove", entry.Source}
 				if scope == "project" {
@@ -239,6 +254,12 @@ func (m *Model) installPackage(source string, global bool) tea.Cmd {
 	source = strings.TrimSpace(source)
 	if source == "" {
 		return nil
+	}
+	if !global {
+		if err := m.projectWriteRefusal(false); err != nil {
+			m.setToast(err.Error())
+			return nil
+		}
 	}
 	args := []string{"install", source}
 	scope := "globally"

@@ -5,6 +5,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -192,6 +193,11 @@ type Model struct {
 	settingsPanel      *settingsState
 	pendingSettingsRow *settingsRow
 
+	// projectTrusted is trust.json's nearest decision for the working
+	// directory; trustErr records an unreadable store.
+	projectTrusted bool
+	trustErr       error
+
 	// bridgeReady reports whether pi loaded pie-tui's bridge extension, which
 	// provides hot tool switching, work modes, and reload.
 	bridgeReady bool
@@ -299,7 +305,29 @@ func (m *Model) reloadConfig() {
 	if modelsFile, err := config.LoadModels(m.paths); err == nil {
 		m.modelsFile = modelsFile
 	}
+	if m.paths.Dir != "" && m.opts.CWD != "" {
+		m.projectTrusted, m.trustErr = config.ProjectTrusted(m.paths.Dir, m.opts.CWD)
+	}
 	m.reloadCatalog()
+}
+
+// projectWriteRefusal explains why a project write must not happen, or nil.
+// requiresDecision matches MCP's rule (an explicit trust decision, even in a
+// folder with no project resources); plugins accept a fresh folder.
+func (m *Model) projectWriteRefusal(requiresDecision bool) error {
+	if m.opts.CWD == "" {
+		return errors.New("no working directory is set")
+	}
+	if m.trustErr != nil {
+		return fmt.Errorf("cannot read trust.json: %w", m.trustErr)
+	}
+	if !requiresDecision && !config.ProjectRequiresTrust(m.opts.CWD) {
+		return nil
+	}
+	if m.projectTrusted {
+		return nil
+	}
+	return errors.New("the project is not trusted; start pi in it, choose Trust, then reload settings")
 }
 
 // reloadCatalog rebuilds the provider catalog and folds in the models the

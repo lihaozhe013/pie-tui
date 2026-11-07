@@ -103,3 +103,42 @@ func TestMCPServerMasksSecrets(t *testing.T) {
 		t.Fatalf("headers = %q", headers)
 	}
 }
+
+func TestProjectMCPServerNeedsTrust(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".pi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".pi", "mcp.json"), []byte(`{"mcpServers":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PI_CODING_AGENT_DIR", t.TempDir())
+	m := New(newFakeClient(), Options{CWD: dir})
+	m.openMCPServer(config.MCPServer{Name: "local", Command: "true", Enabled: true, Exposure: "auto"}, "project")
+	rows := map[string]settingsRow{}
+	for _, row := range m.settingsPanel.tabs[0].Rows {
+		rows[row.ID] = row
+	}
+	if _, ok := rows["mcp-enabled"]; ok {
+		t.Fatal("untrusted project server is editable")
+	}
+	if rows["mcp-trust"].Current() != "read only" {
+		t.Fatalf("status = %q", rows["mcp-trust"].Current())
+	}
+	if cmd := m.addMCP("local true", true); cmd != nil {
+		t.Fatal("untrusted project add ran")
+	}
+	if !strings.Contains(m.toast, "not trusted") {
+		t.Fatalf("toast = %q", m.toast)
+	}
+
+	m.projectTrusted = true
+	m.openMCPServer(config.MCPServer{Name: "local", Command: "true", Enabled: true, Exposure: "auto"}, "project")
+	rows = map[string]settingsRow{}
+	for _, row := range m.settingsPanel.tabs[0].Rows {
+		rows[row.ID] = row
+	}
+	if _, ok := rows["mcp-enabled"]; !ok {
+		t.Fatal("trusted project server is read only")
+	}
+}

@@ -57,3 +57,29 @@ func TestPluginsTabDisablesAndEnablesPackages(t *testing.T) {
 		t.Fatal("filtered package disabled")
 	}
 }
+
+func TestProjectPluginsNeedTrust(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".pi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	settings := `{"packages":[{"source":"npm:local","extensions":["a"]}]}`
+	if err := os.WriteFile(filepath.Join(dir, ".pi", "settings.json"), []byte(settings), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PI_CODING_AGENT_DIR", t.TempDir())
+	m := New(newFakeClient(), Options{CWD: dir})
+	if cmd := m.installPackage("npm:local", false); cmd != nil {
+		t.Fatal("untrusted project install ran")
+	}
+	if !strings.Contains(m.toast, "not trusted") {
+		t.Fatalf("toast = %q", m.toast)
+	}
+
+	fresh := t.TempDir()
+	m.opts.CWD = fresh
+	m.projectTrusted = false
+	if cmd := m.installPackage("npm:local", false); cmd == nil {
+		t.Fatal("a fresh project should accept a local install")
+	}
+}
