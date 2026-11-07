@@ -27,7 +27,9 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   block, tool call, retry, or compaction, with a pulsing marker, an `Elapsed`
   clock, a `~N tokens` estimate of the block being written, and a live `t/s`
   rate
-- Tool calls rendered as compact lines, with a colourised diff for `edit`/`write`
+- Tool calls rendered as compact lines; shell commands and `edit`/`write`
+  diffs are syntax-highlighted from the tool's file type, with added and
+  removed diff rows tinted green and red
 - Thinking blocks (collapsible), follow-up queueing, steering, and abort
 - Model picker, thinking-level cycling, session rename/resume/new, compaction,
   HTML export, and token/context statistics. The chosen model is saved to pi's

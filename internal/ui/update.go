@@ -353,28 +353,14 @@ func (m *Model) startTool(event *rpc.ToolExecutionStartEvent) {
 	}
 	m.activity.addTool(event.ToolCallID, event.ToolName, args, input)
 
-	if path, pairs, ok := toolDiff(event.ToolName, args); ok {
-		body, truncated := diffBody(pairs, 200)
-		added, removed := diffStats(pairs)
-		block := newBlock(blockDiff, "")
-		block.callID = event.ToolCallID
-		block.title = strings.TrimSpace(event.ToolName + " " + path)
-		block.meta = fmt.Sprintf("+%d -%d", added, removed)
-		block.body = body
+	if block, ok := newDiffBlock(event.ToolCallID, event.ToolName, args); ok {
 		m.syncBlockExpansion(block)
-		block.streaming = true
-		if truncated {
-			block.meta += " (truncated)"
-		}
 		m.transcript.Add(block)
 		m.followOutput()
 		return
 	}
 
-	block := newBlock(blockTool, "")
-	block.callID = event.ToolCallID
-	block.title = event.ToolName
-	block.meta = toolSummary(event.ToolName, args)
+	block := newToolBlock(event.ToolCallID, event.ToolName, args)
 	block.status = statusRunning
 	m.syncBlockExpansion(block)
 	block.streaming = true
@@ -382,12 +368,48 @@ func (m *Model) startTool(event *rpc.ToolExecutionStartEvent) {
 	m.followOutput()
 }
 
+// newDiffBlock builds the diff card of a file mutation. Its rows are capped and
+// syntax-coloured once here, so streaming and scrolling never tokenize again.
+func newDiffBlock(callID, name string, args map[string]any) (*block, bool) {
+	path, pairs, ok := toolDiff(name, args)
+	if !ok {
+		return nil, false
+	}
+	lines, truncated := styledDiffLines(pairs, toolCodeLexer(name, args), expandedBodyCap)
+	added, removed := diffStats(pairs)
+	block := newBlock(blockDiff, "")
+	block.callID = callID
+	block.title = strings.TrimSpace(name + " " + path)
+	block.meta = fmt.Sprintf("+%d -%d", added, removed)
+	if truncated {
+		block.meta += " (truncated)"
+	}
+	block.diff = lines
+	return block, true
+}
+
+// newToolBlock builds the compact card of a tool that does not mutate files. A
+// shell call carries its highlighted command above the output instead of a
+// one-line summary, so a multi-line command keeps its shape.
+func newToolBlock(callID, name string, args map[string]any) *block {
+	block := newBlock(blockTool, "")
+	block.callID = callID
+	block.title = name
+	if isShellToolName(strings.ToLower(strings.TrimSpace(name))) {
+		block.command = toolCommandLines(name, args)
+	}
+	if len(block.command) == 0 {
+		block.summary = toolSummary(name, args)
+	}
+	return block
+}
+
 func (m *Model) updateTool(event *rpc.ToolExecutionUpdateEvent) {
 	block := m.transcript.Tool(event.ToolCallID)
 	if block == nil {
 		return
 	}
-	if preview := toolResultText(event.PartialResult); preview != "" {
+	if preview := toolResultText(event.PartialResult); preview != "" && block.kind != blockDiff {
 		block.body = preview
 		m.syncBlockExpansion(block)
 		block.invalidate()
@@ -420,7 +442,7 @@ func (m *Model) endTool(event *rpc.ToolExecutionEndEvent) {
 	if event.IsError && block.kind == blockDiff {
 		block.status = statusError
 		if body := toolResultText(event.Result); body != "" {
-			block.body += "\n! " + body
+			block.body = body
 		}
 	}
 	block.streaming = false
@@ -434,7 +456,9 @@ func (m *Model) applyToolResult(message rpc.Message) {
 	if block == nil {
 		return
 	}
-	if body := toolResultText(mustJSON(message)); body != "" {
+	// A diff card keeps its rows; a result only replaces them when the tool
+	// failed, where the error text explains the failure below the diff.
+	if body := toolResultText(mustJSON(message)); body != "" && (block.kind != blockDiff || message.IsError) {
 		block.body = body
 	}
 	if message.IsError {
@@ -469,22 +493,12 @@ func (m *Model) loadHistory(messages []rpc.Message) {
 			}
 			for _, call := range message.Tools() {
 				args := rpc.DecodeArgs(call.Arguments)
-				if path, pairs, ok := toolDiff(call.Name, args); ok {
-					body, _ := diffBody(pairs, 200)
-					added, removed := diffStats(pairs)
-					block := newBlock(blockDiff, "")
-					block.callID = call.ID
-					block.title = strings.TrimSpace(call.Name + " " + path)
-					block.meta = fmt.Sprintf("+%d -%d", added, removed)
-					block.body = body
+				if block, ok := newDiffBlock(call.ID, call.Name, args); ok {
 					m.syncBlockExpansion(block)
 					m.transcript.Add(block)
 					continue
 				}
-				block := newBlock(blockTool, "")
-				block.callID = call.ID
-				block.title = call.Name
-				block.meta = toolSummary(call.Name, args)
+				block := newToolBlock(call.ID, call.Name, args)
 				block.status = statusPending
 				m.syncBlockExpansion(block)
 				m.transcript.Add(block)
@@ -494,12 +508,12 @@ func (m *Model) loadHistory(messages []rpc.Message) {
 			if block == nil {
 				continue
 			}
-			if body := toolResultText(mustJSON(message)); body != "" {
+			if body := toolResultText(mustJSON(message)); body != "" && (block.kind != blockDiff || message.IsError) {
 				block.body = body
 			}
 			if message.IsError {
 				block.status = statusError
-			} else {
+			} else if block.kind != blockDiff {
 				block.status = statusOK
 			}
 			m.syncBlockExpansion(block)
@@ -714,7 +728,11 @@ func (m *Model) syncBlockExpansion(b *block) {
 		return
 	}
 	streaming := b.streaming && b.kind == blockTool
-	b.collapsed = !m.expanded && !streaming && autoCollapsed(b.kind, b.body)
+	rows := bodyLines(b.body)
+	if b.kind == blockDiff {
+		rows += len(b.diff)
+	}
+	b.collapsed = !m.expanded && !streaming && autoCollapsed(b.kind, rows)
 }
 
 func (m *Model) applyExpansion() {

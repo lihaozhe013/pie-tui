@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/lipgloss"
+	xansi "github.com/charmbracelet/x/ansi"
 )
 
 // blockKind classifies one entry of the transcript.
@@ -39,13 +40,16 @@ const (
 // Assistant blocks keep a per-markdown-segment render cache so streaming only
 // re-renders the unstable tail.
 type block struct {
-	kind   blockKind
-	callID string
-	text   string
-	title  string
-	meta   string
-	body   string
-	status blockStatus
+	kind    blockKind
+	callID  string
+	text    string
+	title   string
+	summary string     // tool argument preview, plain text
+	meta    string     // tool stats: duration, diff counts
+	body    string     // tool output or error text
+	diff    []diffLine // file mutation rows, already syntax-coloured
+	command []string   // shell command rows, already syntax-coloured
+	status  blockStatus
 
 	collapsed bool
 	streaming bool
@@ -379,12 +383,13 @@ func bodyLines(body string) int {
 	return strings.Count(body, "\n") + 1
 }
 
-// autoCollapsed reports whether a body exceeds its default preview size.
-func autoCollapsed(kind blockKind, body string) bool {
+// autoCollapsed reports whether a block's rendered rows exceed its default
+// preview size.
+func autoCollapsed(kind blockKind, rows int) bool {
 	if kind == blockDiff {
-		return bodyLines(body) > autoDiffPreviewLines
+		return rows > autoDiffPreviewLines
 	}
-	return bodyLines(body) > autoToolPreviewLines
+	return rows > autoToolPreviewLines
 }
 
 func (t *transcript) renderTool(b *block, width int) string {
@@ -404,6 +409,9 @@ func (t *transcript) renderTool(b *block, width int) string {
 	}
 
 	head := color.Render(marker) + " " + t.styles.toolName.Render(b.title)
+	if b.summary != "" {
+		head += " " + t.styles.toolMeta.Render(b.summary)
+	}
 	if b.meta != "" {
 		head += " " + t.styles.toolMeta.Render(b.meta)
 	}
@@ -411,63 +419,116 @@ func (t *transcript) renderTool(b *block, width int) string {
 		head += " " + t.styles.errorText.Render("failed")
 	}
 
-	if strings.TrimSpace(b.body) == "" {
+	var sections []string
+	if len(b.command) > 0 {
+		sections = append(sections, t.renderShellCommand(b.command, width))
+	}
+	if strings.TrimSpace(b.body) != "" {
+		lines := strings.Split(strings.TrimRight(b.body, "\n"), "\n")
+		if b.collapsed {
+			sections = append(sections, t.styles.faint.Render(fmt.Sprintf("… +%d lines (ctrl+o)", len(lines))))
+		} else {
+			hidden := 0
+			if len(lines) > expandedBodyCap {
+				hidden = len(lines) - expandedBodyCap
+				lines = lines[:expandedBodyCap]
+			}
+			sections = append(sections, t.styles.toolMeta.Width(width-2).Render(strings.Join(lines, "\n")))
+			if hidden > 0 {
+				sections = append(sections, t.styles.faint.Render(fmt.Sprintf("… +%d more lines", hidden)))
+			}
+		}
+	}
+	if len(sections) == 0 {
 		return head
 	}
+	return head + "\n" + indentLines(strings.Join(sections, "\n"), "  ")
+}
 
-	lines := strings.Split(strings.TrimRight(b.body, "\n"), "\n")
-	if b.collapsed {
-		return head + "\n  " + t.styles.faint.Render(fmt.Sprintf("… +%d lines (ctrl+o)", len(lines)))
-	}
+// shellCommandLineCap keeps a heredoc or a long script from taking over the
+// transcript. The command is the tool card's first section, not its output, so
+// it does not follow the output's expand/collapse state.
+const shellCommandLineCap = 24
 
+// renderShellCommand draws a shell tool's command above its output: a "$"
+// prompt on the first row, a gutter on continuations, and the command's own
+// syntax colours. Long rows wrap at the transcript width.
+func (t *transcript) renderShellCommand(command []string, width int) string {
+	lines := command
 	hidden := 0
-	if len(lines) > expandedBodyCap {
-		hidden = len(lines) - expandedBodyCap
-		lines = lines[:expandedBodyCap]
+	if len(lines) > shellCommandLineCap {
+		hidden = len(lines) - shellCommandLineCap
+		lines = lines[:shellCommandLineCap]
 	}
-	wrapped := t.styles.toolMeta.Width(width - 2).Render(strings.Join(lines, "\n"))
-	out := head + "\n" + indentLines(wrapped, "  ")
+	limit := maxInt(width-4, 1) // block indent and prompt gutter
+	var out []string
+	for i, line := range lines {
+		for j, row := range strings.Split(wrapANSI(expandTabs(line), limit), "\n") {
+			lead := "  "
+			if i == 0 && j == 0 {
+				lead = t.styles.accent.Render("$")
+				if row != "" {
+					lead += " "
+				}
+			}
+			out = append(out, lead+row)
+		}
+	}
 	if hidden > 0 {
-		out += "\n  " + t.styles.faint.Render(fmt.Sprintf("… +%d more lines", hidden))
+		out = append(out, t.styles.faint.Render(fmt.Sprintf("… +%d lines", hidden)))
 	}
-	return out
+	return strings.Join(out, "\n")
 }
 
 func (t *transcript) renderDiffBlock(b *block, width int) string {
-	head := t.styles.toolName.Render("● " + b.title)
+	marker := t.styles.toolName.Render("●")
+	if b.status == statusError {
+		marker = t.styles.errorText.Render("!")
+	}
+	head := marker + " " + t.styles.toolName.Render(b.title)
 	if b.meta != "" {
 		head += " " + t.renderDiffMeta(b.meta)
 	}
-	if strings.TrimSpace(b.body) == "" {
-		return head
-	}
 
-	lines := strings.Split(strings.TrimRight(b.body, "\n"), "\n")
-	if b.collapsed {
-		return head + "\n  " + t.styles.faint.Render(fmt.Sprintf("… +%d lines (ctrl+o)", len(lines)))
-	}
-
+	lines := b.diff
 	hidden := 0
-	if len(lines) > expandedBodyCap {
+	if !b.collapsed && len(lines) > expandedBodyCap {
 		hidden = len(lines) - expandedBodyCap
 		lines = lines[:expandedBodyCap]
 	}
-	clip := lipgloss.NewStyle().MaxWidth(maxInt(width-2, 8))
+	// Two columns of indent, one marker column, one space, then the row text.
+	textWidth := maxInt(width-4, 1)
+	addTint := diffTint(t.styles.theme.DiffAdd, t.styles.theme.Panel, diffAddTintAlpha)
+	delTint := diffTint(t.styles.theme.DiffDel, t.styles.theme.Panel, diffDelTintAlpha)
 	var out strings.Builder
 	out.WriteString(head)
+	if b.collapsed && len(lines) > 0 {
+		out.WriteString("\n  " + t.styles.faint.Render(fmt.Sprintf("… +%d lines (ctrl+o)", len(lines))))
+		lines = nil
+	}
 	for _, line := range lines {
+		marker := " "
 		style := t.styles.diffMeta
-		switch {
-		case strings.HasPrefix(line, "+"):
-			style = t.styles.diffAdd
-		case strings.HasPrefix(line, "-"):
-			style = t.styles.diffDel
+		tint := ""
+		switch line.kind {
+		case '+':
+			marker, style, tint = "+", t.styles.diffAdd, addTint
+		case '-':
+			marker, style, tint = "-", t.styles.diffDel, delTint
+		}
+		text := xansi.Truncate(expandTabs(line.text), textWidth, "")
+		row := style.Render(marker) + " " + text
+		if pad := textWidth - lipgloss.Width(text); pad > 0 {
+			row += strings.Repeat(" ", pad)
 		}
 		out.WriteString("\n  ")
-		out.WriteString(style.Render(clip.Render(line)))
+		out.WriteString(tintLine(row, tint))
 	}
 	if hidden > 0 {
 		out.WriteString("\n  " + t.styles.faint.Render(fmt.Sprintf("… +%d more lines", hidden)))
+	}
+	for _, line := range splitLines(b.body) {
+		out.WriteString("\n  " + t.styles.errorText.Render("! "+line))
 	}
 	return out.String()
 }

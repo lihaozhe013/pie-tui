@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -30,6 +29,32 @@ func toolSummary(name string, args map[string]any) string {
 	return summary
 }
 
+// toolPathKeys are the argument names under which a coding tool names the file
+// it works on. The list mirrors Pie's web UI so both clients colour the same
+// calls.
+var toolPathKeys = []string{
+	"path",
+	"file_path",
+	"filePath",
+	"filepath",
+	"absolute_path",
+	"target_file",
+	"notebook_path",
+	"filename",
+	"fileName",
+	"file",
+}
+
+// toolArgPath is the file a coding tool's arguments name, if they name one.
+func toolArgPath(args map[string]any) string {
+	for _, key := range toolPathKeys {
+		if value, ok := args[key].(string); ok && value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 // diffPair is one old/new text replacement of an edit tool call.
 type diffPair struct {
 	Old string
@@ -45,10 +70,7 @@ func toolDiff(name string, args map[string]any) (string, []diffPair, bool) {
 	if args == nil {
 		return "", nil, false
 	}
-	path, _ := args["path"].(string)
-	if path == "" {
-		path, _ = args["file_path"].(string)
-	}
+	path := toolArgPath(args)
 
 	switch name {
 	case "write", "create":
@@ -158,26 +180,4 @@ func diffStats(pairs []diffPair) (added, removed int) {
 		}
 	}
 	return added, removed
-}
-
-// diffBody renders every pair into plain lines, capped so one huge rewrite cannot
-// take over the scrollback.
-func diffBody(pairs []diffPair, limit int) (string, bool) {
-	var (
-		lines     []string
-		truncated bool
-	)
-	for _, pair := range pairs {
-		for _, line := range computeDiff(pair.Old, pair.New, 2) {
-			if limit > 0 && len(lines) >= limit {
-				truncated = true
-				break
-			}
-			lines = append(lines, fmt.Sprintf("%c %s", line.kind, line.text))
-		}
-		if truncated {
-			break
-		}
-	}
-	return strings.Join(lines, "\n"), truncated
 }
