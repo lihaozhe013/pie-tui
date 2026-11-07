@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -411,6 +412,20 @@ func (m *Model) toolsSettingsTab() settingsTab {
 				},
 			},
 		)
+	}
+
+	if m.settings != nil && runtime.GOOS == "windows" {
+		tab.Rows = append(tab.Rows, settingsRow{
+			ID:    "powershell-tool",
+			Label: "PowerShell tool",
+			Kind:  settingsToggle,
+			Help:  "Replaces bash with powershell in the resolved default tools.",
+			Bool: func() bool {
+				enabled, err := m.settings.PowerShellEnabled(runtime.GOOS)
+				return err == nil && enabled
+			},
+			SetBool: func(on bool) error { return m.settings.SetPowerShellEnabled(on) },
+		})
 	}
 
 	if m.presetFile != nil && m.presetFile.Invalid() != nil {
