@@ -2,8 +2,13 @@ package ui
 
 import (
 	"fmt"
+	"math"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lihaozhe/pie-tui/internal/rpc"
 )
 
 // activityPhase is the broad state of the current run. It is what the activity
@@ -19,12 +24,21 @@ const (
 	activityRunningTools
 )
 
-// activityTool is one tool call currently executing. The bar keeps its argument
-// preview so a run that names a file or command stays informative.
+// activityTool is one tool call currently executing. The bar keeps the decoded
+// arguments for the label and the raw JSON for the token estimate.
 type activityTool struct {
 	callID string
 	name   string
-	detail string
+	args   map[string]any
+	input  string
+}
+
+// activityStreamBlock is one content block of the assistant message being
+// written right now. It mirrors the GUI's per-message streaming store, so the
+// estimate and the token rate never read another message's leftovers.
+type activityStreamBlock struct {
+	kind string // "text", "thinking" or "toolCall"
+	text string // block text, or the raw arguments of a tool call
 }
 
 // activityState is the live run status shown in the single row above the
@@ -37,6 +51,9 @@ type activityState struct {
 	draftTool  string
 	compacting bool
 	retry      string
+	stream     map[int]*activityStreamBlock
+	rateAt     time.Time
+	rateTokens float64
 }
 
 // begin starts a new run's clock and clears the state of the previous one.
@@ -50,14 +67,22 @@ func (a *activityState) begin() {
 // reset folds the bar away when no run is active.
 func (a *activityState) reset() { *a = activityState{} }
 
+// beginMessage starts a fresh assistant message's estimate state. The GUI
+// anchors the token rate per reply, and stale blocks must not outlive theirs.
+func (a *activityState) beginMessage() {
+	a.stream = nil
+	a.rateAt = time.Time{}
+	a.rateTokens = 0
+}
+
 func (a *activityState) ensureStarted() {
 	if a.startedAt.IsZero() {
 		a.startedAt = time.Now()
 	}
 }
 
-func (a *activityState) addTool(callID, name, detail string) {
-	a.tools = append(a.tools, activityTool{callID: callID, name: name, detail: detail})
+func (a *activityState) addTool(callID, name string, args map[string]any, input string) {
+	a.tools = append(a.tools, activityTool{callID: callID, name: name, args: args, input: input})
 	a.phase = activityRunningTools
 	a.draftTool = ""
 	a.ensureStarted()
@@ -79,6 +104,67 @@ func (a *activityState) removeTool(callID string) bool {
 	return false
 }
 
+// applyDelta folds one streaming assistant delta into the current message's
+// blocks, the way the GUI's streaming store does for its composer row.
+func (a *activityState) applyDelta(event rpc.AssistantMessageEvent) {
+	kind := ""
+	switch {
+	case strings.HasPrefix(event.Type, "text_"):
+		kind = "text"
+	case strings.HasPrefix(event.Type, "thinking_"):
+		kind = "thinking"
+	case strings.HasPrefix(event.Type, "toolcall_"):
+		kind = "toolCall"
+	default:
+		return
+	}
+	if a.stream == nil {
+		a.stream = make(map[int]*activityStreamBlock, 2)
+	}
+	block := a.stream[event.ContentIndex]
+	if block == nil {
+		block = &activityStreamBlock{kind: kind}
+		a.stream[event.ContentIndex] = block
+	}
+	switch event.Type {
+	case "text_start", "thinking_start", "toolcall_start":
+		block.kind = kind
+	case "text_delta", "thinking_delta", "toolcall_delta":
+		block.text += event.Delta
+	case "text_end", "thinking_end":
+		if event.Content != "" {
+			block.text = event.Content
+		}
+	case "toolcall_end":
+		if event.ToolCall != nil && len(event.ToolCall.Arguments) > 0 {
+			block.text = string(event.ToolCall.Arguments)
+		}
+	}
+}
+
+// lastStreamBlock is the block the model is writing right now, ordered the
+// way the accumulator orders content.
+func (a *activityState) lastStreamBlock() *activityStreamBlock {
+	var last *activityStreamBlock
+	lastIndex := -1
+	for index, block := range a.stream {
+		if index > lastIndex {
+			lastIndex, last = index, block
+		}
+	}
+	return last
+}
+
+// streamTokens is the whole current message's estimate: the number the rate
+// divides, never shown on its own.
+func (a *activityState) streamTokens() float64 {
+	var total float64
+	for _, block := range a.stream {
+		total += estimateTokens(block.text)
+	}
+	return total
+}
+
 // activityActive reports whether the animation needs a tick. It follows the
 // row rather than busy alone: a manual compaction and a retry run without a
 // prompt, and both still need the marker to blink.
@@ -86,15 +172,21 @@ func (m *Model) activityActive() bool { return m.activityRows() > 0 }
 
 // activityRows is the space the bar reserves in the frame. The row folds away
 // when no run is active, mirroring the collapsible status slot of the desktop
-// client, so an idle composer keeps the space it had before.
+// client. While a run is active the slot stays open even when its content is
+// hidden — the GUI keeps its row height through a plain text stream so the
+// composer never moves.
 func (m *Model) activityRows() int {
-	if m.activityLabel() == "" {
-		return 0
+	if m.activityLabel() != "" {
+		return 1
 	}
-	return 1
+	if m.busy {
+		return 1
+	}
+	return 0
 }
 
-// activityLabel is the single sentence the bar shows for the current run.
+// activityLabel is the single sentence the bar shows for the current run. The
+// wording mirrors the GUI's composer-activity labels.
 func (m *Model) activityLabel() string {
 	a := &m.activity
 	switch {
@@ -106,16 +198,18 @@ func (m *Model) activityLabel() string {
 		return activityToolsLabel(a.tools)
 	case a.draftTool != "":
 		return "Preparing " + a.draftTool + "…"
+	case a.phase == activityPreparingTool:
+		// The call's name has not arrived yet; the GUI names the wait here.
+		return "Waiting for provider…"
 	case a.phase == activityThinking:
 		return "Thinking…"
-	case a.phase == activityStreaming:
-		return "Writing response…"
-	case a.phase == activityWaiting && m.busy:
-		return "Waiting for model…"
-	case m.busy:
-		return "Working…"
+	case a.phase == activityWaiting:
+		return "Waiting for provider…"
+	default:
+		// The GUI hides the row's content while the model writes plain text;
+		// the slot stays reserved so the composer never moves.
+		return ""
 	}
-	return ""
 }
 
 // renderActivity renders the single row directly above the composer. It lives
@@ -126,24 +220,127 @@ func (m *Model) renderActivity() string {
 		return ""
 	}
 
-	left := m.activityMarker() + " " + m.styles.activityLabel.Render(label)
+	marker := m.activityMarker()
+	meta := m.activityMeta()
+	sep := ""
+	if meta != "" {
+		sep = "  "
+	}
+	styled := m.styles.activityLabel.Render(label)
+	line := marker + " " + styled
+	if sep != "" {
+		line += sep + meta
+	}
+	if lipglossWidth(line) <= m.width {
+		return line
+	}
 
-	var right string
-	if !m.activity.startedAt.IsZero() {
-		if elapsed := time.Since(m.activity.startedAt); elapsed >= time.Second {
-			right = m.styles.activityMeta.Render(formatElapsed(elapsed))
+	// The GUI shrinks the label first and keeps every meta item whole; only
+	// when the marker and meta alone overflow does the right edge clip, which
+	// loses the rate first.
+	budget := m.width - lipglossWidth(marker) - 1 - lipglossWidth(sep) - lipglossWidth(meta)
+	if budget >= 1 {
+		return marker + " " + truncateLine(styled, budget) + sep + meta
+	}
+	head := marker + " "
+	room := m.width - lipglossWidth(head)
+	if room < 1 {
+		return truncateLine(line, m.width)
+	}
+	return head + truncateLine(meta, room)
+}
+
+// activityMeta is the quiet sibling of the label: the run's clock, the
+// estimate of the block the label names, and the live token rate.
+func (m *Model) activityMeta() string {
+	a := &m.activity
+	var parts []string
+	if !a.startedAt.IsZero() {
+		elapsed := formatTurnDuration(time.Since(a.startedAt))
+		parts = append(parts, m.styles.activityMeta.Render("Elapsed "+elapsed))
+	}
+	if tokens, ok := m.activityTokenEstimate(); ok {
+		if rounded := int(math.Round(tokens)); rounded >= 1 {
+			parts = append(parts, m.styles.activityMeta.Render(
+				"~"+formatCompactCount(rounded)+" tokens"))
 		}
 	}
-	if right == "" {
-		return truncateLine(left, m.width)
+	if rate, ok := m.activityTokensPerSecond(time.Now()); ok {
+		parts = append(parts, m.styles.activityMeta.Render(rate))
 	}
+	return strings.Join(parts, "  ")
+}
 
-	left = truncateLine(left, maxInt(1, m.width-lipglossWidth(right)-1))
-	gap := m.width - lipglossWidth(left) - lipglossWidth(right)
-	if gap < 1 {
-		gap = 1
+// activityTokenEstimate is the "~N tokens" beside the label: one block at a
+// time, never a total, so the number only ever annotates what the label names.
+// The branch order mirrors the GUI's composerActivityTokens.
+func (m *Model) activityTokenEstimate() (float64, bool) {
+	a := &m.activity
+	if a.compacting {
+		return 0, false
 	}
-	return left + strings.Repeat(" ", gap) + right
+	if len(a.tools) > 1 {
+		// A grouped row names several calls, so no single number applies.
+		return 0, false
+	}
+	if len(a.tools) == 1 {
+		if a.tools[0].input == "" {
+			return 0, false
+		}
+		return estimateTokens(a.tools[0].input), true
+	}
+	block := a.lastStreamBlock()
+	if block == nil {
+		return 0, false
+	}
+	if block.kind == "toolCall" {
+		return estimateTokens(block.text), true
+	}
+	if a.phase == activityWaiting {
+		return 0, false
+	}
+	if block.kind == "thinking" {
+		return estimateTokens(block.text), true
+	}
+	return 0, false
+}
+
+// activityTokensPerSecond is the live speed beside the label's number. It
+// measures the whole streaming reply, anchored at the message's first tokens,
+// and hides whenever the model is silent: while a call executes the count is
+// frozen, and a rate over frozen tokens would only fall as the tool runs.
+func (m *Model) activityTokensPerSecond(now time.Time) (string, bool) {
+	a := &m.activity
+	if a.compacting || len(a.tools) > 0 {
+		return "", false
+	}
+	block := a.lastStreamBlock()
+	if block == nil {
+		return "", false
+	}
+	drafting := block.kind == "toolCall"
+	activeThinking := block.kind == "thinking" && a.phase != activityWaiting
+	if !drafting && !activeThinking {
+		return "", false
+	}
+	total := a.streamTokens()
+	if total <= 0 {
+		return "", false
+	}
+	if a.rateAt.IsZero() {
+		a.rateAt = now
+		a.rateTokens = total
+		return "", false
+	}
+	elapsed := now.Sub(a.rateAt).Seconds()
+	if elapsed <= 0.5 {
+		return "", false
+	}
+	rate := (total - a.rateTokens) / elapsed
+	if rate < 0 {
+		rate = 0
+	}
+	return fmt.Sprintf("%.1f t/s", rate), true
 }
 
 // activityMarker is the pulsing blue dot in front of the label. It changes both
@@ -156,23 +353,69 @@ func (m *Model) activityMarker() string {
 	return m.styles.activityMarkerDim.Render("○")
 }
 
-// formatElapsed renders the run clock without sub-second noise.
-func formatElapsed(elapsed time.Duration) string {
-	seconds := int(elapsed / time.Second)
-	if seconds < 60 {
-		return fmt.Sprintf("%ds", seconds)
+// formatTurnDuration is the run's clock, the GUI's turn-duration format:
+// 42s · 3m 5s · 1h 20m 5s.
+func formatTurnDuration(elapsed time.Duration) string {
+	total := int(elapsed / time.Second)
+	if total < 0 {
+		total = 0
 	}
-	minutes := seconds / 60
-	seconds -= minutes * 60
-	if minutes < 60 {
-		return fmt.Sprintf("%dm %02ds", minutes, seconds)
+	switch {
+	case total < 60:
+		return fmt.Sprintf("%ds", total)
+	case total < 3600:
+		return fmt.Sprintf("%dm %ds", total/60, total%60)
+	default:
+		return fmt.Sprintf("%dh %dm %ds", total/3600, (total/60)%60, total%60)
 	}
-	hours := minutes / 60
-	minutes -= hours * 60
-	return fmt.Sprintf("%dh %02dm", hours, minutes)
 }
 
-// activityToolKind groups concurrent calls so the bar stays one line.
+// formatCompactCount is the GUI's compact counter: 950 · 1.1k · 18.4k · 1.2M.
+func formatCompactCount(value int) string {
+	if value >= 1_000_000 {
+		return fmt.Sprintf("%.1fM", float64(value)/1_000_000)
+	}
+	if value >= 1000 {
+		formatted := fmt.Sprintf("%.1f", float64(value)/1000)
+		formatted = strings.TrimSuffix(formatted, ".0")
+		return formatted + "k"
+	}
+	return strconv.Itoa(value)
+}
+
+// estimateTokens is the GUI's heuristic, not a measurement: CJK is roughly one
+// token per character, everything else roughly four characters per token.
+func estimateTokens(text string) float64 {
+	var cjk, rest float64
+	for _, r := range text {
+		if isCJKRune(r) {
+			cjk++
+		} else {
+			rest++
+		}
+	}
+	return cjk + rest/4
+}
+
+// isCJKRune mirrors the GUI's CJK token pattern over code points.
+func isCJKRune(r rune) bool {
+	switch {
+	case r >= 0x3000 && r <= 0x30FF:
+		return true
+	case r >= 0x3400 && r <= 0x9FFF:
+		return true
+	case r >= 0xF900 && r <= 0xFAFF:
+		return true
+	case r >= 0x20000 && r <= 0x2FA1F:
+		return true
+	case r >= 0xAC00 && r <= 0xD7AF:
+		return true
+	}
+	return false
+}
+
+// activityToolKind groups concurrent calls so the bar stays one line. The
+// classification mirrors the GUI's tool-name predicates.
 type activityToolKind int
 
 const (
@@ -181,150 +424,174 @@ const (
 	activityToolSearch
 	activityToolList
 	activityToolShell
-	activityToolEdit
-	activityToolWrite
 )
 
-var activityShellTools = map[string]bool{
+// readToolPattern is the GUI's isReadToolName: read, read_file, and the same
+// word behind a `_` or `.` separator.
+var readToolPattern = regexp.MustCompile(`(?i)^(?:read(?:_file)?|.*[._]read(?:_file)?)$`)
+
+// shellToolSet is the GUI's shell tool names.
+var shellToolSet = map[string]bool{
 	"bash": true, "shell": true, "sh": true, "zsh": true,
 	"powershell": true, "pwsh": true, "cmd": true, "exec": true,
 	"exec_command": true, "run_command": true, "run_shell_command": true,
 	"execute_command": true, "terminal": true, "local_shell": true,
 }
 
-// activityToolKindOf classifies a tool name permissively enough to cover
-// extension-decorated names without turning unrelated MCP tools into reads.
+var (
+	shellTailSplit = regexp.MustCompile(`\.|__`)
+	shellWord      = regexp.MustCompile(`(^|[._-])(bash|shell|powershell)([._-]|$)`)
+)
+
+// activityToolKindOf classifies a tool name with the GUI's predicates: only
+// the last name segment counts for search and list, so a tool named
+// find_user keeps a label of its own.
 func activityToolKindOf(name string) activityToolKind {
 	lower := strings.ToLower(strings.TrimSpace(name))
-	head := lower
-	if i := strings.IndexAny(head, " ("); i >= 0 {
-		head = head[:i]
-	}
-	last := head
-	if i := strings.LastIndexAny(last, "._"); i >= 0 {
-		last = last[i+1:]
+
+	segments := strings.FieldsFunc(lower, func(r rune) bool {
+		return r == '.' || r == '_'
+	})
+	last := ""
+	if len(segments) > 0 {
+		last = segments[len(segments)-1]
 	}
 
 	switch {
-	case head == "read" || head == "read_file" || head == "file_read" ||
-		last == "read" || strings.HasSuffix(head, "_read_file") || strings.HasSuffix(head, ".read_file"):
-		return activityToolRead
-	case last == "grep" || last == "find" || last == "search" || last == "glob":
+	case last == "grep" || last == "find":
 		return activityToolSearch
-	case last == "ls" || last == "list" || last == "list_dir" || last == "listdir":
+	case last == "ls":
 		return activityToolList
-	case activityShellTools[head] || activityShellTools[last]:
+	case readToolPattern.MatchString(lower):
+		return activityToolRead
+	case isShellToolName(lower):
 		return activityToolShell
-	case last == "edit" || last == "edit_file" || last == "patch" || last == "apply_patch" ||
-		head == "multi_edit" || strings.Contains(head, "str_replace"):
-		return activityToolEdit
-	case last == "write" || last == "write_file" || last == "create" || head == "write":
-		return activityToolWrite
 	}
 	return activityToolOther
 }
 
-// activityToolsLabel names concurrent calls, grouping repeats by kind so the
-// row never grows past one line.
+// isShellToolName mirrors the GUI: the head before whitespace or a paren, the
+// tail behind `.` or `__`, and the decorated bash/shell/powershell forms.
+func isShellToolName(lower string) bool {
+	head := lower
+	if i := strings.IndexAny(head, " ("); i >= 0 {
+		head = head[:i]
+	}
+	if shellToolSet[head] {
+		return true
+	}
+	tails := shellTailSplit.Split(head, -1)
+	if shellToolSet[tails[len(tails)-1]] {
+		return true
+	}
+	return shellWord.MatchString(head)
+}
+
+// activityToolsLabel names concurrent calls, grouping repeats by kind in the
+// GUI's fixed order so the row never grows past one line.
 func activityToolsLabel(tools []activityTool) string {
 	if len(tools) == 1 {
 		return activityToolLabel(tools[0])
 	}
 
-	type group struct {
-		kind  activityToolKind
-		tools []activityTool
-	}
-	var groups []group
+	var reads, searches, listings, shells, others []activityTool
 	for _, tool := range tools {
-		kind := activityToolKindOf(tool.name)
-		merged := false
-		for i := range groups {
-			if groups[i].kind == kind {
-				groups[i].tools = append(groups[i].tools, tool)
-				merged = true
-				break
-			}
-		}
-		if !merged {
-			groups = append(groups, group{kind: kind, tools: []activityTool{tool}})
+		switch activityToolKindOf(tool.name) {
+		case activityToolSearch:
+			searches = append(searches, tool)
+		case activityToolList:
+			listings = append(listings, tool)
+		case activityToolRead:
+			reads = append(reads, tool)
+		case activityToolShell:
+			shells = append(shells, tool)
+		default:
+			others = append(others, tool)
 		}
 	}
 
-	parts := make([]string, 0, len(groups))
-	for _, item := range groups {
-		if len(item.tools) == 1 {
-			parts = append(parts, activityToolLabel(item.tools[0]))
-			continue
-		}
-		parts = append(parts, activityToolGroupLabel(item.kind, item.tools))
+	parts := make([]string, 0, 5)
+	if len(reads) == 1 {
+		parts = append(parts, activityToolLabel(reads[0]))
+	} else if len(reads) > 1 {
+		parts = append(parts, fmt.Sprintf("Reading %d files", len(reads)))
+	}
+	if len(searches) == 1 {
+		parts = append(parts, activityToolLabel(searches[0]))
+	} else if len(searches) > 1 {
+		parts = append(parts, fmt.Sprintf("Searching %d patterns", len(searches)))
+	}
+	if len(listings) == 1 {
+		parts = append(parts, activityToolLabel(listings[0]))
+	} else if len(listings) > 1 {
+		parts = append(parts, fmt.Sprintf("Listing %d directories", len(listings)))
+	}
+	if len(shells) == 1 {
+		parts = append(parts, activityToolLabel(shells[0]))
+	} else if len(shells) > 1 {
+		parts = append(parts, fmt.Sprintf("Running %d commands", len(shells)))
+	}
+	if len(others) > 0 {
+		parts = append(parts, activityOthersLabel(others))
 	}
 	return strings.Join(parts, " · ")
 }
 
-func activityToolGroupLabel(kind activityToolKind, tools []activityTool) string {
-	count := len(tools)
-	switch kind {
-	case activityToolRead:
-		return fmt.Sprintf("Reading %d files", count)
-	case activityToolSearch:
-		return fmt.Sprintf("Searching for %d patterns", count)
-	case activityToolList:
-		return fmt.Sprintf("Listing %d directories", count)
-	case activityToolShell:
-		return fmt.Sprintf("Running %d commands", count)
-	case activityToolEdit:
-		return fmt.Sprintf("Editing %d files", count)
-	case activityToolWrite:
-		return fmt.Sprintf("Writing %d files", count)
+// activityOthersLabel covers every tool that is not a read, search, listing,
+// or shell call — the GUI keeps those as plain "Running <name>" groups.
+func activityOthersLabel(tools []activityTool) string {
+	if len(tools) == 1 {
+		return "Running " + tools[0].name + "..."
 	}
-
-	names := make([]string, 0, count)
+	names := make([]string, 0, len(tools))
 	for _, tool := range tools {
 		names = append(names, tool.name)
 	}
-	if count <= 3 {
-		return "Running " + strings.Join(names, ", ")
+	if len(names) <= 3 {
+		return "Running " + strings.Join(names, ", ") + "..."
 	}
-	return fmt.Sprintf("Running %d tools", count)
+	return fmt.Sprintf("Running %s (+%d)...", strings.Join(names[:2], ", "), len(names)-2)
 }
 
+// activityToolLabel is one concrete call's label: a group of one keeps its
+// detail (path, pattern, command), exactly like the GUI.
 func activityToolLabel(tool activityTool) string {
-	detail := strings.TrimSpace(tool.detail)
 	switch activityToolKindOf(tool.name) {
 	case activityToolRead:
-		if detail != "" {
-			return "Reading " + detail
+		if path := activityArg(tool.args, "path", "file_path", "filePath"); path != "" {
+			return "Reading " + path
 		}
 		return "Reading…"
 	case activityToolSearch:
-		if detail != "" {
-			return "Searching for " + detail
+		pattern := activityArg(tool.args, "pattern", "query")
+		if pattern == "" {
+			return "Searching…"
 		}
-		return "Searching…"
+		if path := activityArg(tool.args, "path", "file_path", "filePath"); path != "" {
+			return fmt.Sprintf("Searching \"%s\" in %s", pattern, path)
+		}
+		return fmt.Sprintf("Searching \"%s\"", pattern)
 	case activityToolList:
-		if detail != "" {
-			return "Listing " + detail
+		if path := activityArg(tool.args, "path", "file_path", "filePath"); path != "" {
+			return "Listing " + path
 		}
 		return "Listing…"
 	case activityToolShell:
-		if detail != "" {
-			return "Running " + detail
+		if command := activityArg(tool.args, "command", "cmd"); command != "" {
+			return "Running " + strings.Join(strings.Fields(command), " ")
 		}
-		return "Running command…"
-	case activityToolEdit:
-		if detail != "" {
-			return "Editing " + detail
-		}
-		return "Editing…"
-	case activityToolWrite:
-		if detail != "" {
-			return "Writing " + detail
-		}
-		return "Writing…"
+		return "Running " + tool.name + "..."
 	}
-	if detail != "" {
-		return "Running " + tool.name + " " + detail
+	return "Running " + tool.name + "..."
+}
+
+// activityArg picks the first non-empty string argument, the way the GUI
+// reads path/pattern/command out of a call's input.
+func activityArg(args map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := args[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
 	}
-	return "Running " + tool.name + "…"
+	return ""
 }

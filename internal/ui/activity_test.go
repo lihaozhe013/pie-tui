@@ -16,11 +16,15 @@ func TestModelActivityBarTracksRun(t *testing.T) {
 
 	model, _ := newTestModel(t)
 	model, _ = step(t, model, eventMsg{event: &rpc.AgentStartEvent{}})
-	if got := model.activityLabel(); got != "Waiting for model…" {
+	if got := model.activityLabel(); got != "Waiting for provider…" {
 		t.Fatalf("after agent_start label = %q", got)
 	}
-	if view := ansi.Strip(model.View()); !strings.Contains(view, "Waiting for model…") {
+	view := ansi.Strip(model.View())
+	if !strings.Contains(view, "Waiting for provider…") {
 		t.Fatalf("activity bar missing from view:\n%s", view)
+	}
+	if !strings.Contains(view, "Elapsed 0s") {
+		t.Fatalf("elapsed clock missing from activity bar:\n%s", view)
 	}
 
 	model, _ = step(t, model, eventMsg{event: &rpc.MessageUpdateEvent{
@@ -46,7 +50,7 @@ func TestModelActivityBarTracksRun(t *testing.T) {
 		ToolCallID: "call_1",
 		ToolName:   "read",
 	}})
-	if got := model.activityLabel(); got != "Waiting for model…" {
+	if got := model.activityLabel(); got != "Waiting for provider…" {
 		t.Fatalf("after tool end label = %q", got)
 	}
 
@@ -54,7 +58,7 @@ func TestModelActivityBarTracksRun(t *testing.T) {
 	if got := model.activityLabel(); got != "" {
 		t.Fatalf("settled label = %q", got)
 	}
-	if view := ansi.Strip(model.View()); strings.Contains(view, "Waiting for model…") {
+	if view := ansi.Strip(model.View()); strings.Contains(view, "Waiting for provider…") {
 		t.Fatalf("settled run still in activity bar:\n%s", view)
 	}
 }
@@ -110,6 +114,36 @@ func TestActivityMarkerBlinks(t *testing.T) {
 	}
 }
 
+func TestActivityHiddenDuringTextStreamKeepsSlot(t *testing.T) {
+	t.Parallel()
+
+	model, _ := newTestModel(t)
+	model, _ = step(t, model, tea.WindowSizeMsg{Width: 80, Height: 24})
+	model, _ = step(t, model, eventMsg{event: &rpc.AgentStartEvent{}})
+	model, _ = step(t, model, eventMsg{event: &rpc.MessageUpdateEvent{
+		Assistant: rpc.AssistantMessageEvent{Type: "text_delta", ContentIndex: 0, Delta: "hello"},
+	}})
+
+	// The GUI hides the row's content while the model writes plain text, but
+	// keeps the slot so the composer never moves.
+	if got := model.activityLabel(); got != "" {
+		t.Fatalf("text stream label = %q", got)
+	}
+	if got := model.activityRows(); got != 1 {
+		t.Fatalf("text stream rows = %d, want 1", got)
+	}
+	if got := model.renderActivity(); got != "" {
+		t.Fatalf("text stream render = %q", got)
+	}
+	lines := strings.Split(model.View(), "\n")
+	if len(lines) != 24 {
+		t.Fatalf("text stream view has %d lines, want 24", len(lines))
+	}
+	if activity := ansi.Strip(lines[len(lines)-5]); activity != "" {
+		t.Fatalf("reserved activity row = %q, want blank", activity)
+	}
+}
+
 func TestActivityCompactionAndRetryLabels(t *testing.T) {
 	t.Parallel()
 
@@ -129,7 +163,7 @@ func TestActivityCompactionAndRetryLabels(t *testing.T) {
 		t.Fatalf("retry label = %q", got)
 	}
 	model, _ = step(t, model, eventMsg{event: &rpc.AutoRetryEndEvent{Success: true}})
-	if got := model.activityLabel(); got != "Waiting for model…" {
+	if got := model.activityLabel(); got != "Waiting for provider…" {
 		t.Fatalf("label after retry = %q", got)
 	}
 }
@@ -142,15 +176,17 @@ func TestActivityToolLabels(t *testing.T) {
 		tool   activityTool
 		expect string
 	}{
-		{"read", activityTool{name: "read", detail: "main.go"}, "Reading main.go"},
-		{"namespaced read", activityTool{name: "fs.read_file", detail: "a.go"}, "Reading a.go"},
-		{"grep", activityTool{name: "grep", detail: "TODO"}, "Searching for TODO"},
-		{"list", activityTool{name: "ls", detail: "internal"}, "Listing internal"},
-		{"bash", activityTool{name: "bash", detail: "go test ./..."}, "Running go test ./..."},
-		{"edit", activityTool{name: "edit", detail: "main.go"}, "Editing main.go"},
-		{"write", activityTool{name: "write", detail: "main.go"}, "Writing main.go"},
-		{"unknown", activityTool{name: "custom_tool", detail: "payload"}, "Running custom_tool payload"},
-		{"unknown without detail", activityTool{name: "custom_tool"}, "Running custom_tool…"},
+		{"read", activityTool{name: "read", args: map[string]any{"path": "main.go"}}, "Reading main.go"},
+		{"namespaced read", activityTool{name: "fs.read_file", args: map[string]any{"path": "a.go"}}, "Reading a.go"},
+		{"read without path", activityTool{name: "read"}, "Reading…"},
+		{"grep", activityTool{name: "grep", args: map[string]any{"pattern": "TODO"}}, `Searching "TODO"`},
+		{"grep in path", activityTool{name: "grep", args: map[string]any{"pattern": "TODO", "path": "internal"}}, `Searching "TODO" in internal`},
+		{"list", activityTool{name: "ls", args: map[string]any{"path": "internal"}}, "Listing internal"},
+		{"bash", activityTool{name: "bash", args: map[string]any{"command": "go test ./...  "}}, "Running go test ./..."},
+		{"bash without command", activityTool{name: "bash"}, "Running bash..."},
+		{"edit", activityTool{name: "edit", args: map[string]any{"path": "main.go"}}, "Running edit..."},
+		{"write", activityTool{name: "write", args: map[string]any{"path": "main.go"}}, "Running write..."},
+		{"unknown", activityTool{name: "custom_tool"}, "Running custom_tool..."},
 	}
 	for _, tc := range cases {
 		tc := tc
@@ -162,26 +198,77 @@ func TestActivityToolLabels(t *testing.T) {
 	}
 
 	grouped := activityToolsLabel([]activityTool{
-		{callID: "1", name: "read", detail: "a.go"},
-		{callID: "2", name: "read", detail: "b.go"},
-		{callID: "3", name: "bash", detail: "go test ./..."},
+		{callID: "1", name: "read", args: map[string]any{"path": "a.go"}},
+		{callID: "2", name: "read", args: map[string]any{"path": "b.go"}},
+		{callID: "3", name: "bash", args: map[string]any{"command": "go test ./..."}},
 	})
 	if grouped != "Reading 2 files · Running go test ./..." {
 		t.Fatalf("grouped label = %q", grouped)
 	}
 }
 
-func TestFormatElapsed(t *testing.T) {
+func TestActivityTokenEstimateAndRate(t *testing.T) {
+	t.Parallel()
+
+	model, _ := newTestModel(t)
+	model, _ = step(t, model, eventMsg{event: &rpc.AgentStartEvent{}})
+	model, _ = step(t, model, eventMsg{event: &rpc.MessageUpdateEvent{
+		Assistant: rpc.AssistantMessageEvent{Type: "thinking_delta", ContentIndex: 0, Delta: "abcdefgh"},
+	}})
+
+	// Eight characters at four chars per token: the "~N tokens" beside label.
+	tokens, ok := model.activityTokenEstimate()
+	if !ok || tokens != 2 {
+		t.Fatalf("token estimate = %v, %v; want 2, true", tokens, ok)
+	}
+	if view := ansi.Strip(model.View()); !strings.Contains(view, "~2 tokens") {
+		t.Fatalf("token estimate missing from view:\n%s", view)
+	}
+
+	// Two tokens two seconds after the anchor: 1.0 t/s.
+	model.activity.rateAt = time.Now().Add(-2 * time.Second)
+	model.activity.rateTokens = 0
+	rate, ok := model.activityTokensPerSecond(time.Now())
+	if !ok || rate != "1.0 t/s" {
+		t.Fatalf("rate = %q, %v; want \"1.0 t/s\", true", rate, ok)
+	}
+	if view := ansi.Strip(model.View()); !strings.Contains(view, "1.0 t/s") {
+		t.Fatalf("rate missing from view:\n%s", view)
+	}
+}
+
+func TestActivityLabelEllipsisKeepsMeta(t *testing.T) {
+	t.Parallel()
+
+	model, _ := newTestModel(t)
+	model, _ = step(t, model, tea.WindowSizeMsg{Width: 48, Height: 24})
+	model, _ = step(t, model, eventMsg{event: &rpc.AgentStartEvent{}})
+	model, _ = step(t, model, eventMsg{event: &rpc.ToolExecutionStartEvent{
+		ToolCallID: "call_1",
+		ToolName:   "bash",
+		Args:       []byte(`{"command":"` + strings.Repeat("x", 200) + `"}`),
+	}})
+
+	line := ansi.Strip(model.renderActivity())
+	if width := lipglossWidth(line); width > 48 {
+		t.Fatalf("activity line is %d cells wide: %q", width, line)
+	}
+	if !strings.Contains(line, "Elapsed") {
+		t.Fatalf("meta lost to the label: %q", line)
+	}
+}
+
+func TestFormatTurnDuration(t *testing.T) {
 	t.Parallel()
 
 	cases := map[time.Duration]string{
 		1500 * time.Millisecond:     "1s",
-		65 * time.Second:            "1m 05s",
-		2*time.Hour + 7*time.Minute: "2h 07m",
+		65 * time.Second:            "1m 5s",
+		2*time.Hour + 7*time.Minute: "2h 7m 0s",
 	}
 	for duration, want := range cases {
-		if got := formatElapsed(duration); got != want {
-			t.Fatalf("formatElapsed(%s) = %q, want %q", duration, got, want)
+		if got := formatTurnDuration(duration); got != want {
+			t.Fatalf("formatTurnDuration(%s) = %q, want %q", duration, got, want)
 		}
 	}
 }

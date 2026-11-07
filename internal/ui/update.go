@@ -34,7 +34,11 @@ func (m *Model) handleEvent(event rpc.Event) (tea.Model, tea.Cmd) {
 
 	case *rpc.MessageStartEvent:
 		// Assistant content arrives through updates; user messages are added
-		// locally when submitted, so nothing to do here.
+		// locally when submitted, so nothing to do here. A new assistant message
+		// starts the activity row's estimate and token-rate anchor over.
+		if ev.Message.Role == "assistant" {
+			m.activity.beginMessage()
+		}
 		return m, m.waitEvent()
 
 	case *rpc.MessageUpdateEvent:
@@ -146,6 +150,7 @@ func (m *Model) handleEvent(event rpc.Event) (tea.Model, tea.Cmd) {
 func (m *Model) applyStreamUpdate(update *rpc.MessageUpdateEvent) {
 	kind := update.Assistant.Type
 	m.stream.acc.Apply(update.Assistant)
+	m.activity.applyDelta(update.Assistant)
 
 	switch {
 	case strings.HasPrefix(kind, "thinking_"):
@@ -196,6 +201,14 @@ func (m *Model) applyMessageEnd(message rpc.Message) {
 	switch message.Role {
 	case "assistant":
 		text := message.Text()
+		// The model is silent again: name the wait until the next block or the
+		// run's end, unless tools still hold the row. The streaming blocks are
+		// the GUI's per-message store — they do not outlive their message.
+		if m.activity.phase != activityRunningTools {
+			m.activity.phase = activityWaiting
+		}
+		m.activity.draftTool = ""
+		m.activity.stream = nil
 		if text != "" {
 			if m.stream.assistant == nil {
 				m.stream.assistant = newBlock(blockAssistant, text)
@@ -254,7 +267,11 @@ func (m *Model) removeBlock(target *block) {
 // raw argument dump.
 func (m *Model) startTool(event *rpc.ToolExecutionStartEvent) {
 	args := rpc.DecodeArgs(event.Args)
-	m.activity.addTool(event.ToolCallID, event.ToolName, toolSummary(event.ToolName, args))
+	input := strings.TrimSpace(string(event.Args))
+	if input == "" && args != nil {
+		input = string(mustJSON(args))
+	}
+	m.activity.addTool(event.ToolCallID, event.ToolName, args, input)
 
 	if path, pairs, ok := toolDiff(event.ToolName, args); ok {
 		body, truncated := diffBody(pairs, 200)
