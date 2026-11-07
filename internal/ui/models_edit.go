@@ -183,6 +183,16 @@ func (m *Model) openProviderEditor(providerID string, isNew bool) {
 
 	if !draft.IsNew {
 		rows = append(rows, settingsRow{
+			ID:    "provider-check",
+			Label: "Check readiness",
+			Kind:  settingsAction,
+			Help:  "Runs `pi auth check` without leaving the session.",
+			Run: func(m *Model, s *settingsState) tea.Cmd {
+				m.setToast("checking " + draft.ID + "…")
+				return m.checkProvider(draft.ID)
+			},
+		})
+		rows = append(rows, settingsRow{
 			ID:    "provider-remove-credential",
 			Label: "Remove credential",
 			Kind:  settingsAction,

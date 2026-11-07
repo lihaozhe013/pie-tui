@@ -72,3 +72,32 @@ func TestMCPSettersKeepUnknownFields(t *testing.T) {
 		t.Fatal("server not re-enabled")
 	}
 }
+
+func TestMCPServersParseMaskedSecrets(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PI_CODING_AGENT_DIR", dir)
+	path := filepath.Join(dir, "mcp.json")
+	data := `{"mcpServers":{"remote":{"url":"https://example.test/mcp","headers":{"Authorization":"Bearer secret"}},"local":{"command":"tool","env":{"TOKEN":"abc","HOME":"/tmp"}}}}`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	paths, _ := ResolvePaths()
+	file, err := LoadMCP(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	servers := file.Servers()
+	if len(servers) != 2 {
+		t.Fatalf("servers = %+v", servers)
+	}
+	remote, local := servers[0], servers[1]
+	if len(remote.Headers) != 1 || remote.Headers["Authorization"] != "Bearer secret" {
+		t.Fatalf("headers = %+v", remote.Headers)
+	}
+	if names := SecretNames(remote.Headers); len(names) != 1 || names[0] != "Authorization" {
+		t.Fatalf("names = %v", names)
+	}
+	if len(local.Env) != 2 || local.Env["TOKEN"] != "abc" {
+		t.Fatalf("env = %+v", local.Env)
+	}
+}

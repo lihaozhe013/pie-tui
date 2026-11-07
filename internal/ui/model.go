@@ -480,6 +480,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case providerCheckMsg:
+		m.setToast(providerCheckSummary(msg))
+		return m, nil
+
+	case catalogRefreshedMsg:
+		if msg.err != nil {
+			m.setToast("model catalog: " + msg.err.Error())
+		} else {
+			m.setToast("model catalog refreshed")
+		}
+		return m, nil
+
 	case statsMsg:
 		m.stats = msg.stats
 		if m.overlay != nil && m.overlay.action == "stats" {

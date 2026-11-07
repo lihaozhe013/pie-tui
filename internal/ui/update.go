@@ -526,6 +526,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+k":
 		return m, m.openModelPicker()
 
+	case "ctrl+g":
+		return m, m.openPresetPicker()
+
 	case "ctrl+p":
 		return m, m.openSettings()
 
@@ -803,6 +806,7 @@ func (m *Model) helpItems() []pickerItem {
 		{"esc", "interrupt the running turn"},
 		{"ctrl+c", "interrupt, twice to quit"},
 		{"ctrl+k", "pick a model"},
+		{"ctrl+g", "pick a tool preset"},
 		{"ctrl+p", "open settings"},
 		{"shift+tab", "cycle thinking level"},
 		{"ctrl+t", "toggle thinking blocks"},
@@ -1352,6 +1356,9 @@ func (m *Model) selectOverlayItem() tea.Cmd {
 				return m.openDirectoryPicker(start)
 			}
 			return m.switchProject(item.Value)
+		case "settings-jump":
+			m.closeOverlay()
+			return m.applySettingsJump(item.Value)
 		case "fork":
 			m.closeOverlay()
 			return m.forkSession(item.Value)
@@ -1396,6 +1403,9 @@ func (m *Model) answerInput(value string) tea.Cmd {
 	}
 	if action == "session-search" {
 		return m.searchSessions(value)
+	}
+	if action == "settings-search" {
+		return m.searchSettings(value)
 	}
 	if action == "skill-search" {
 		m.setToast("searching skills.sh…")

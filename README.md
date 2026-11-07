@@ -26,15 +26,16 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
 - Model picker, thinking-level cycling, session rename/resume/new, compaction,
   HTML export, and token/context statistics
 - A settings panel (`/settings` or `ctrl+p`) with the same tabs as the Pie web
-  UI, sharing pi's files: `settings.json`, `models.json`, `AGENTS.md`, and the
-  `pie-*` companion files in the agent directory
+  UI and a `/` search that jumps across every tab, sharing pi's files:
+  `settings.json`, `models.json`, `AGENTS.md`, and the `pie-*` companion files
+  in the agent directory
 - Tool presets (`/preset`): the built-in configured, plan, chat-only,
   read-only, default, and full sets, plus custom presets stored in
   `pie-tool-presets.json` and editable from Settings › Tools
 - A Models tab that merges pi's catalog with `models.json`: context-window
   limit, startup defaults, enabled-model patterns, per-model thinking levels,
-  provider credentials, and custom provider and model editors (including
-  compatibility endpoints, costs, and thinking maps)
+  provider credentials with `pi auth check` readiness, and custom provider and
+  model editors (including compatibility endpoints, costs, and thinking maps)
 - Code mode controls in Settings › Tools: automatic or always-on (writes
   `+codemode` to `defaultTools` minimally), the `codemode.mode` choice, and the
   inline result budget
@@ -69,8 +70,8 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   directories" for the rest
 - An MCP tab that lists the agent and project `mcp.json` servers, checks
   connections with `pi mcp list --json`, toggles `enabled`, sets the exposure
-  mode, adds servers through `pi mcp add`, and signs in, signs out, or removes
-  through the same CLI
+  mode, shows env and header names with values masked, adds servers through
+  `pi mcp add`, and signs in, signs out, or removes through the same CLI
 - Goal controls through a manually installed goal package: `/goal` shows the
   status, objective, token usage, and the start, pause, resume, complete, and
   clear actions; the header carries the status. `pie-tui` never bundles the
@@ -133,6 +134,7 @@ Flags are forwarded to pi where they overlap (`--provider`, `--model`, `--name`,
 | `ctrl+c` | interrupt; press twice to quit |
 | `ctrl+d` | quit when the editor is empty |
 | `ctrl+k` | pick a model |
+| `ctrl+g` | pick a tool preset |
 | `ctrl+p` | open settings |
 | `shift+tab` | cycle the thinking level |
 | `ctrl+t` | show/hide thinking blocks |

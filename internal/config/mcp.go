@@ -1,6 +1,9 @@
 package config
 
-import "path/filepath"
+import (
+	"path/filepath"
+	"sort"
+)
 
 // MCPFile is a snapshot of one mcp.json (global or project).
 type MCPFile struct {
@@ -17,6 +20,8 @@ type MCPServer struct {
 	Enabled     bool
 	Exposure    string
 	Description string
+	Env         map[string]string
+	Headers     map[string]string
 	Raw         *Value
 }
 
@@ -63,6 +68,8 @@ func (m *MCPFile) Servers() []MCPServer {
 		server.Args = entry.Get("args").StringsOr(nil)
 		server.URL, _ = entry.Get("url").AsString()
 		server.Description, _ = entry.Get("description").AsString()
+		server.Env = stringMap(entry.Get("env"))
+		server.Headers = stringMap(entry.Get("headers"))
 		server.Exposure, _ = entry.Get("exposure").AsString()
 		if server.Exposure == "" {
 			server.Exposure = "auto"
@@ -73,6 +80,33 @@ func (m *MCPFile) Servers() []MCPServer {
 		out = append(out, server)
 	}
 	return out
+}
+
+func stringMap(value *Value) map[string]string {
+	if value == nil || !value.IsObject() {
+		return nil
+	}
+	out := make(map[string]string, value.Len())
+	for _, key := range value.Keys() {
+		if text, ok := value.Get(key).AsString(); ok {
+			out[key] = text
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// SecretNames lists the env or header names in sorted order. Values are never
+// returned to the UI, so panels can only show masked entries.
+func SecretNames(values map[string]string) []string {
+	names := make([]string, 0, len(values))
+	for name := range values {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // Update applies fn to a freshly loaded mcp.json and writes it back.

@@ -159,6 +159,18 @@ func (m *Model) goalPanel() *settingsState {
 	if m.hasGoal {
 		tab.Rows = append(tab.Rows, settingsRow{ID: "goal-clear", Label: "Clear", Kind: settingsAction, Run: send("/goal clear")})
 	}
+	if m.busy {
+		tab.Rows = append(tab.Rows, settingsRow{
+			ID:    "goal-stop",
+			Label: "Stop run",
+			Help:  "Interrupts the running turn; the goal stays paused until you resume it.",
+			Kind:  settingsAction,
+			Run: func(m *Model, s *settingsState) tea.Cmd {
+				m.closeOverlay()
+				return m.abort()
+			},
+		})
+	}
 	tab.Rows = append(tab.Rows, settingsRow{
 		ID:    "goal-settings",
 		Label: "Goal settings",

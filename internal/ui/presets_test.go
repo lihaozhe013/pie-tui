@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/lihaozhe/pie-tui/internal/config"
 	"github.com/lihaozhe/pie-tui/internal/session"
 )
@@ -91,4 +93,24 @@ func TestPresetEditorSavesAndReloads(t *testing.T) {
 	if len(config.LoadPresets(m.paths).Presets()) != 0 {
 		t.Fatal("preset not deleted")
 	}
+}
+
+func TestCtrlGOpensPresetPicker(t *testing.T) {
+	t.Setenv("PI_CODING_AGENT_DIR", t.TempDir())
+	m := New(newFakeClient(), Options{})
+	m.width, m.height = 100, 30
+	m.ready = true
+	m.layout()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	model := updated.(*Model)
+	if model.overlay == nil || model.overlay.action != "preset" {
+		t.Fatalf("overlay action = %v", overlayAction(model.overlay))
+	}
+}
+
+func overlayAction(overlay *overlay) string {
+	if overlay == nil {
+		return ""
+	}
+	return overlay.action
 }

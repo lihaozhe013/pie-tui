@@ -217,6 +217,12 @@ func (m *Model) openMCPServer(server config.MCPServer, scope string) tea.Cmd {
 			}
 			return server.Description
 		}},
+		{ID: "mcp-env", Label: "Environment", Kind: settingsInfo, Help: "Names only; values stay in mcp.json.", Current: func() string {
+			return maskedSecrets(server.Env)
+		}},
+		{ID: "mcp-headers", Label: "Headers", Kind: settingsInfo, Help: "Names only; values stay in mcp.json.", Current: func() string {
+			return maskedSecrets(server.Headers)
+		}},
 		{
 			ID:    "mcp-enabled",
 			Label: "Enabled",
@@ -323,6 +329,18 @@ func (m *Model) openMCPServer(server config.MCPServer, scope string) tea.Cmd {
 	m.settingsPanel = panel
 	m.openOverlay(&overlay{kind: overlaySettings, action: "mcp-detail", settings: panel})
 	return nil
+}
+
+func maskedSecrets(values map[string]string) string {
+	names := config.SecretNames(values)
+	if len(names) == 0 {
+		return "(none)"
+	}
+	masked := make([]string, 0, len(names))
+	for _, name := range names {
+		masked = append(masked, name+"=···")
+	}
+	return strings.Join(masked, ", ")
 }
 
 func mcpExposureChoices() []pickerItem {

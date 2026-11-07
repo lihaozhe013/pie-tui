@@ -74,3 +74,32 @@ func TestMCPTabListsAndTogglesServers(t *testing.T) {
 		t.Fatalf("status not shown: %+v", tab.Rows)
 	}
 }
+
+func TestMCPServerMasksSecrets(t *testing.T) {
+	t.Setenv("PI_CODING_AGENT_DIR", t.TempDir())
+	m := New(newFakeClient(), Options{})
+	server := config.MCPServer{
+		Name:     "remote",
+		URL:      "https://example.test/mcp",
+		Enabled:  true,
+		Exposure: "auto",
+		Env:      map[string]string{"TOKEN": "secret"},
+		Headers:  map[string]string{"Authorization": "Bearer secret"},
+	}
+	m.openMCPServer(server, "global")
+	if m.overlay == nil || m.settingsPanel == nil {
+		t.Fatal("server panel not open")
+	}
+	rows := map[string]settingsRow{}
+	for _, row := range m.settingsPanel.tabs[0].Rows {
+		rows[row.ID] = row
+	}
+	env := rows["mcp-env"].Current()
+	if strings.Contains(env, "secret") || !strings.Contains(env, "TOKEN=···") {
+		t.Fatalf("env = %q", env)
+	}
+	headers := rows["mcp-headers"].Current()
+	if strings.Contains(headers, "secret") || !strings.Contains(headers, "Authorization=···") {
+		t.Fatalf("headers = %q", headers)
+	}
+}

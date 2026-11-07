@@ -119,3 +119,25 @@ func TestEntriesMsgRestoresGoalAndSelection(t *testing.T) {
 		t.Fatalf("entries not applied: goal=%+v mode=%q", m.goal, m.currentMode)
 	}
 }
+
+func TestGoalPanelStopsARunningTurn(t *testing.T) {
+	m := New(newFakeClient(), Options{})
+	m.goalEnabled = true
+	m.goalAvailable = true
+	m.hasGoal = true
+	m.goal = session.Goal{Status: "active", Objective: "parity"}
+	m.busy = true
+	panel := m.goalPanel()
+	var stop settingsRow
+	for _, row := range panel.tabs[0].Rows {
+		if row.ID == "goal-stop" {
+			stop = row
+		}
+	}
+	if stop.Run == nil {
+		t.Fatalf("stop row missing: %+v", panel.tabs[0].Rows)
+	}
+	if cmd := stop.Run(m, panel); cmd == nil {
+		t.Fatal("stop did not abort")
+	}
+}

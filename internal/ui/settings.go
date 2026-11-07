@@ -284,7 +284,7 @@ func (s *settingsState) View(st styles, width, height int) string {
 	case s.single:
 		lines = append(lines, st.overlayHint.Render("↑/↓ move · enter change · esc back"))
 	default:
-		lines = append(lines, st.overlayHint.Render("↑/↓ move · ←/→ tab · enter change · r reload · esc close"))
+		lines = append(lines, st.overlayHint.Render("↑/↓ move · ←/→ tab · enter change · / search · r reload · esc close"))
 	}
 
 	box := st.overlayBox.Copy().Width(boxWidth).Render(strings.Join(lines, "\n"))
@@ -439,6 +439,12 @@ func (m *Model) handleSettingsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter", " ":
 		return m.activateSettingsRow()
+	case "/":
+		request := &rpc.ExtensionUIRequestEvent{Title: "Search settings", Method: "input", Placeholder: "theme, cache, provider"}
+		overlay := newInputOverlay(request)
+		overlay.action = "settings-search"
+		m.openOverlay(overlay)
+		return m, nil
 	}
 	return m, nil
 }
