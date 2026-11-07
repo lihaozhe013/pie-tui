@@ -32,13 +32,13 @@ type theme struct {
 func defaultTheme() theme {
 	return theme{
 		Base:        lipgloss.AdaptiveColor{Light: "#2B2B33", Dark: "#E4E5E9"},
-		Muted:       lipgloss.AdaptiveColor{Light: "#5F6068", Dark: "#999AA3"},
-		Faint:       lipgloss.AdaptiveColor{Light: "#84858D", Dark: "#6B6C75"},
+		Muted:       lipgloss.AdaptiveColor{Light: "#5F6068", Dark: "#F2E7A0"},
+		Faint:       lipgloss.AdaptiveColor{Light: "#84858D", Dark: "#F2E7A0"},
 		Accent:      lipgloss.AdaptiveColor{Light: "#4F85D1", Dark: "#8BB9FA"},
 		AccentSoft:  lipgloss.AdaptiveColor{Light: "#638EC9", Dark: "#6F9AD6"},
 		User:        lipgloss.AdaptiveColor{Light: "#1667A8", Dark: "#9AD1FF"},
 		Assistant:   lipgloss.AdaptiveColor{Light: "#2B2B33", Dark: "#D5D6DB"},
-		Thinking:    lipgloss.AdaptiveColor{Light: "#6B6C74", Dark: "#8A8B94"},
+		Thinking:    lipgloss.AdaptiveColor{Light: "#6B6C74", Dark: "#F2E7A0"},
 		Tool:        lipgloss.AdaptiveColor{Light: "#4F85D1", Dark: "#A9C7F0"},
 		Success:     lipgloss.AdaptiveColor{Light: "#1A7F37", Dark: "#7EE787"},
 		Warn:        lipgloss.AdaptiveColor{Light: "#8A5B00", Dark: "#E4C07A"},
