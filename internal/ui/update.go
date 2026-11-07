@@ -721,8 +721,7 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 	case "/export":
 		return m.exportSession(), true
 	case "/stats":
-		m.statsNotice = true
-		return m.refreshStats(), true
+		return m.openStats(), true
 	case "/name":
 		if argument != "" {
 			return m.setSessionName(argument), true

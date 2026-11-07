@@ -168,7 +168,6 @@ type Model struct {
 	widget       []string
 	showThinking bool
 	expanded     bool
-	statsNotice  bool
 
 	busy         bool
 	frame        int
@@ -479,9 +478,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case statsMsg:
 		m.stats = msg.stats
-		if m.statsNotice {
-			m.statsNotice = false
-			m.addNotice(m.statsSummary())
+		if m.overlay != nil && m.overlay.action == "stats" {
+			m.showStatsPanel()
 		}
 		return m, nil
 
@@ -751,21 +749,6 @@ func (m *Model) bodyLines() []string {
 		lines = append(lines, "")
 	}
 	return lines
-}
-
-// statsSummary is the human readable /stats answer.
-func (m *Model) statsSummary() string {
-	stats := m.stats
-	summary := fmt.Sprintf("tokens %s · %d user / %d assistant · %d tool calls · $%.2f",
-		formatTokens(stats.Tokens.Total), stats.UserMessages, stats.AssistantMessages, stats.ToolCalls, stats.Cost)
-	if usage := stats.ContextUsage; usage != nil && usage.ContextWindow > 0 {
-		summary += fmt.Sprintf(" · context %s/%s (%.0f%%)",
-			formatTokens(usage.Tokens), formatTokens(usage.ContextWindow), usage.Percent)
-	}
-	if stats.SessionFile != "" {
-		summary += "\n" + stats.SessionFile
-	}
-	return summary
 }
 
 func (m *Model) renderHeader() string {

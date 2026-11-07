@@ -44,6 +44,8 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   `.pi/settings.json`, installs globally or locally, updates one package or
   all, and enables or disables entries. Disabling keeps unknown keys and
   refuses filtered entries instead of silently dropping their filters
+- A statistics panel from `/stats` with message counts, a token breakdown,
+  cost, context usage, and the session file, refreshed while it is open
 - Image attachments through `/image <path> [prompt]`: the file is read,
   base64-encoded, and sent with the prompt through pi's existing image support
 - Project switching with `/cwd [dir]`: a recent-project picker derived from
@@ -146,7 +148,7 @@ memory from other CLIs keeps working.
 | `/image` | | attach a local image to a prompt (`/image shot.png what is this?`) |
 | `/goal` | | goal status and controls; arguments are forwarded to the goal package |
 | `/export` | | export the session as HTML |
-| `/stats` | `/status`, `/usage` | show token and context usage |
+| `/stats` | `/status`, `/usage` | show the statistics panel (messages, tokens, cost, context) |
 | `/clear` | `/cls` | clear the scrollback |
 | `/help` | `/keys` | show key bindings and commands |
 | `/quit` | `/exit`, `/q` | exit pie-tui |

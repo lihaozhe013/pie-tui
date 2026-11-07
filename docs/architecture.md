@@ -126,6 +126,10 @@ clients keeps its preset and its Plan mode. If the extension fails to load, the
 UI reports `unavailable` in Settings › General and refuses preset changes
 rather than silently diverging.
 
+`/stats` is a small settings-style panel over the `get_session_stats` payload.
+It refreshes when the agent settles and when Refresh is pressed, and it shows
+the same numbers as the status bar so the two cannot disagree.
+
 Images are attachments on the normal prompt path, not a separate tool:
 `/image` reads one local file, checks the MIME type, caps it at 20 MB, and
 sends `prompt` with an `images` array. A turn must be idle first, because the
