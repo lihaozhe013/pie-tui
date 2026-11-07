@@ -253,10 +253,15 @@ func (s *Settings) ClearModelThinkingLevel(modelKey string) error {
 	})
 }
 
-// SetShowCacheMissNotices toggles pi's cache-miss notices.
+// SetShowCacheMissNotices toggles pi's cache-miss notices. Off is pi's default,
+// so it removes the key rather than storing false, as Pie does.
 func (s *Settings) SetShowCacheMissNotices(enabled bool) error {
 	return s.Update(func(root *Value) error {
-		root.SetBool("showCacheMissNotices", enabled)
+		if !enabled {
+			root.Delete("showCacheMissNotices")
+			return nil
+		}
+		root.SetBool("showCacheMissNotices", true)
 		return nil
 	})
 }

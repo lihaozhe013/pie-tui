@@ -63,6 +63,13 @@ func TestSettingsReadsAndWrites(t *testing.T) {
 	if err := settings.SetShowCacheMissNotices(false); err != nil {
 		t.Fatalf("SetShowCacheMissNotices: %v", err)
 	}
+	raw, err := os.ReadFile(paths.Settings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "showCacheMissNotices") {
+		t.Fatalf("off stored the key: %s", raw)
+	}
 
 	reloaded, err := LoadSettings(paths)
 	if err != nil {
