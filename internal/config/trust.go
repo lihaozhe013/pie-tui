@@ -51,10 +51,6 @@ func ProjectTrusted(agentDir, cwd string) (bool, error) {
 		var value bool
 		if err := json.Unmarshal(raw, &value); err != nil {
 			// null and invalid values do not decide; pi only accepts booleans.
-			var text string
-			if json.Unmarshal(raw, &text) == nil {
-				continue
-			}
 			continue
 		}
 		decisions[canonicalPath(key)] = value
