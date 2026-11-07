@@ -44,6 +44,8 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   `.pi/settings.json`, installs globally or locally, updates one package or
   all, and enables or disables entries. Disabling keeps unknown keys and
   refuses filtered entries instead of silently dropping their filters
+- Image attachments through `/image <path> [prompt]`: the file is read,
+  base64-encoded, and sent with the prompt through pi's existing image support
 - Project switching with `/cwd [dir]`: a recent-project picker derived from
   session headers, a directory browser, and `/cwd <path>` for direct entry.
   Switching restarts pi in the new folder and starts a fresh session there.
@@ -141,6 +143,7 @@ memory from other CLIs keeps working.
 | `/name` | `/rename` | rename this session |
 | `/title` | | generate a title from the transcript with a one-shot model call |
 | `/cwd` | `/dir`, `/project` | switch working directory; no argument opens the project picker |
+| `/image` | | attach a local image to a prompt (`/image shot.png what is this?`) |
 | `/goal` | | goal status and controls; arguments are forwarded to the goal package |
 | `/export` | | export the session as HTML |
 | `/stats` | `/status`, `/usage` | show token and context usage |

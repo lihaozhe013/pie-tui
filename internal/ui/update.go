@@ -732,6 +732,8 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 		overlay.action = "session-name"
 		m.openOverlay(overlay)
 		return nil, true
+	case "/image":
+		return m.sendImage(argument), true
 	case "/cwd":
 		if argument != "" {
 			return m.switchProject(argument), true

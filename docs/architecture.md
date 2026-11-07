@@ -126,6 +126,12 @@ clients keeps its preset and its Plan mode. If the extension fails to load, the
 UI reports `unavailable` in Settings › General and refuses preset changes
 rather than silently diverging.
 
+Images are attachments on the normal prompt path, not a separate tool:
+`/image` reads one local file, checks the MIME type, caps it at 20 MB, and
+sends `prompt` with an `images` array. A turn must be idle first, because the
+RPC follow-up command cannot carry images. The transcript shows a text
+placeholder, matching how the web composer labels an attachment.
+
 The working directory is the child process's `Dir`, fixed for the life of one
 pi process. `/cwd` therefore restarts the child: it closes the old stdin,
 starts a fresh pi with the same binary, flags, and bridge extension but no
