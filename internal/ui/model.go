@@ -46,6 +46,8 @@ const (
 	tickInterval = 40 * time.Millisecond
 	// toastDuration is how long extension notifications stay visible.
 	toastDuration = 5 * time.Second
+	// heartbeatInterval expires toasts even when pi is idle.
+	heartbeatInterval = time.Second
 	// commandTimeout bounds a single RPC command issued by the UI.
 	commandTimeout = 60 * time.Second
 )
@@ -57,6 +59,8 @@ type (
 	closedMsg struct{ err error }
 
 	tickMsg struct{}
+
+	heartbeatMsg struct{}
 
 	handshakeMsg struct {
 		state    rpc.State
@@ -162,9 +166,14 @@ func New(client Client, opts Options) *Model {
 	return m
 }
 
-// Init starts the event pump and the startup handshake.
+// Init starts the event pump, the startup handshake, and the idle heartbeat.
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(m.waitEvent(), m.handshake())
+	return tea.Batch(m.waitEvent(), m.handshake(), m.heartbeat())
+}
+
+// heartbeat keeps time-based UI state (toast expiry) honest while idle.
+func (m *Model) heartbeat() tea.Cmd {
+	return tea.Tick(heartbeatInterval, func(time.Time) tea.Msg { return heartbeatMsg{} })
 }
 
 func (m *Model) waitEvent() tea.Cmd {
@@ -249,6 +258,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stateMsg:
 		m.state = msg.state
 		return m, nil
+
+	case heartbeatMsg:
+		if m.toast != "" && time.Now().After(m.toastUntil) {
+			m.toast = ""
+		}
+		return m, m.heartbeat()
 
 	case tickMsg:
 		m.ticking = false

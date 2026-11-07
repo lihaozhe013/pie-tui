@@ -409,6 +409,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ctrlCAt = time.Now()
 		if !m.composer.Empty() {
 			m.composer.Reset()
+			m.completion.Hide()
 			m.layout()
 			return m, nil
 		}
@@ -474,12 +475,20 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	before := m.composer.Height()
+	beforeHeight := m.composer.Height()
+	beforeVisible := m.completion.visible
+	beforeCount := len(m.completion.filtered)
+
 	cmd := m.composer.Update(msg)
-	if m.composer.Height() != before {
+	m.completion.Refresh(m.composer.Value())
+
+	// The popup changes the reserved body height, so the frame must be
+	// re-laid-out whenever it appears, disappears, or resizes.
+	if m.composer.Height() != beforeHeight ||
+		m.completion.visible != beforeVisible ||
+		len(m.completion.filtered) != beforeCount {
 		m.layout()
 	}
-	m.completion.Refresh(m.composer.Value())
 	return m, cmd
 }
 
