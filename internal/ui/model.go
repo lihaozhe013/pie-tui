@@ -514,10 +514,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case presetAppliedMsg:
 		if msg.err != nil {
 			m.addError("preset: " + msg.err.Error())
-		} else {
-			m.setToast("preset: " + msg.selection)
+			return m, nil
 		}
-		return m, nil
+		m.setToast("preset: " + msg.selection)
+		return m, tea.Batch(m.loadEntries(), m.loadToolSnapshot())
 
 	case reloadMsg:
 		if msg.err != nil {
@@ -529,7 +529,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.overlay != nil && m.overlay.action == "settings" {
 			m.openSettingsOverlay()
 		}
-		return m, nil
+		return m, tea.Batch(m.refreshState(), m.loadEntries(), m.loadToolSnapshot())
 
 	case providerCheckMsg:
 		m.setToast(providerCheckSummary(msg))
