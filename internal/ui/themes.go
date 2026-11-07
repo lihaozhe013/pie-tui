@@ -91,6 +91,7 @@ func themeFor(id string) theme {
 	base.Base = fixed(pal.Text)
 	base.Muted = fixed(pal.Muted)
 	base.Faint = fixed(pal.Dim)
+	base.Editor = fixed(pal.Dim)
 	base.Accent = fixed(pal.Accent)
 	base.AccentSoft = fixed(pal.AccentHover)
 	base.User = fixed(pal.Accent)

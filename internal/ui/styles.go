@@ -12,6 +12,7 @@ type theme struct {
 	Base        lipgloss.AdaptiveColor
 	Muted       lipgloss.AdaptiveColor
 	Faint       lipgloss.AdaptiveColor
+	Editor      lipgloss.AdaptiveColor
 	Accent      lipgloss.AdaptiveColor
 	AccentSoft  lipgloss.AdaptiveColor
 	User        lipgloss.AdaptiveColor
@@ -34,6 +35,7 @@ func defaultTheme() theme {
 		Base:        lipgloss.AdaptiveColor{Light: "#2B2B33", Dark: "#E4E5E9"},
 		Muted:       lipgloss.AdaptiveColor{Light: "#5F6068", Dark: "#F2E7A0"},
 		Faint:       lipgloss.AdaptiveColor{Light: "#84858D", Dark: "#F2E7A0"},
+		Editor:      lipgloss.AdaptiveColor{Light: "#5F6068", Dark: "#8A8B94"},
 		Accent:      lipgloss.AdaptiveColor{Light: "#4F85D1", Dark: "#8BB9FA"},
 		AccentSoft:  lipgloss.AdaptiveColor{Light: "#638EC9", Dark: "#6F9AD6"},
 		User:        lipgloss.AdaptiveColor{Light: "#1667A8", Dark: "#9AD1FF"},
@@ -130,11 +132,11 @@ func newStyles(t theme) styles {
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(t.Border).
 			Padding(0, 1),
-		editorHint:        lipgloss.NewStyle().Foreground(t.Faint),
+		editorHint:        lipgloss.NewStyle().Foreground(t.Editor),
 		editorText:        lipgloss.NewStyle().Foreground(t.Base),
 		editorCursor:      lipgloss.NewStyle().Reverse(true),
-		editorPlaceholder: lipgloss.NewStyle().Foreground(t.Muted),
-		scrollRail:        lipgloss.NewStyle().Foreground(t.Faint),
+		editorPlaceholder: lipgloss.NewStyle().Foreground(t.Editor),
+		scrollRail:        lipgloss.NewStyle().Foreground(t.Editor),
 		scrollThumb:       lipgloss.NewStyle().Foreground(t.AccentSoft),
 		completion: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
