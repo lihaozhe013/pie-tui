@@ -1332,6 +1332,12 @@ func (m *Model) answerInput(value string) tea.Cmd {
 		m.setToast("installing " + value + "…")
 		return m.installSkill(value)
 	}
+	if action == "plugin-install-global" {
+		return m.installPackage(value, true)
+	}
+	if action == "plugin-install-project" {
+		return m.installPackage(value, false)
+	}
 	if action == "settings-agents" {
 		if err := config.WriteInstructions(m.paths, value); err != nil {
 			if m.settingsPanel != nil {

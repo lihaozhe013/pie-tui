@@ -40,6 +40,10 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   `disable-model-invocation` in the frontmatter, opens the skill file in
   `$VISUAL`/`$EDITOR`, and searches or installs from skills.sh with the
   `npx skills` CLI
+- A Plugins tab that reads pi packages from `settings.json` and the project's
+  `.pi/settings.json`, installs globally or locally, updates one package or
+  all, and enables or disables entries. Disabling keeps unknown keys and
+  refuses filtered entries instead of silently dropping their filters
 - Goal controls through a manually installed goal package: `/goal` shows the
   status, objective, token usage, and the start, pause, resume, complete, and
   clear actions; the header carries the status. `pie-tui` never bundles the

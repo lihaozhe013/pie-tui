@@ -398,6 +398,9 @@ func (m *Model) handleSettingsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.overlay.action == "skill-detail" {
 			return m, m.openSettingsAt("skills")
 		}
+		if m.overlay.action == "package-detail" {
+			return m, m.openSettingsAt("plugins")
+		}
 		m.closeOverlay()
 		return m, nil
 	case "ctrl+c":
@@ -572,7 +575,7 @@ func (m *Model) buildSettingsTabs() []settingsTab {
 		m.modelsSettingsTab(),
 		m.toolsSettingsTab(),
 		m.skillsSettingsTab(),
-		placeholderTab("plugins", "Plugins", "Pi packages and their resources will live here."),
+		m.pluginsSettingsTab(),
 		placeholderTab("mcp", "MCP", "MCP servers, transports, and sign-in will live here."),
 	}
 }

@@ -505,6 +505,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case pluginActionMsg:
+		return m.applyPluginAction(msg)
+
 	case skillActionMsg:
 		return m.applySkillAction(msg)
 

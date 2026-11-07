@@ -167,6 +167,14 @@ func (v *Value) Items() []*Value {
 	return v.items
 }
 
+// SetIndex replaces one array item.
+func (v *Value) SetIndex(i int, val *Value) {
+	if v == nil || v.kind != KindArray || i < 0 || i >= len(v.items) {
+		return
+	}
+	v.items[i] = val
+}
+
 // Set replaces the member with key or appends it at the end.
 func (v *Value) Set(key string, val *Value) {
 	if v == nil || v.kind != KindObject {

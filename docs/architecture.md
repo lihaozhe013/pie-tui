@@ -126,6 +126,15 @@ clients keeps its preset and its Plan mode. If the extension fails to load, the
 UI reports `unavailable` in Settings › General and refuses preset changes
 rather than silently diverging.
 
+Plugins are the `packages` array in `settings.json` and in the project's
+`.pi/settings.json`. A string entry is enabled; an object whose four resource
+lists are all empty is disabled. Disabling a filtered entry is refused because
+the write would drop the filters, exactly as the web panel refuses it. Every
+mutation goes through `internal/config` under the lock, so an entry keeps its
+position, unknown keys (`autoload`, say) and the rest of the file. Installing,
+removing, and updating shell out to `pi install/remove/update`, which writes the
+same settings entry pi itself reads.
+
 Skills are read with pi's own discovery rules: a `SKILL.md` directory is one
 skill and is not recursed into, standalone `.md` children are skills, and
 symlinks are followed. The roots are the agent directory's `skills/`, the
