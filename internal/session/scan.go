@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/lihaozhe/pie-tui/internal/config"
 )
 
 // Entry is one resumable session file.
@@ -46,16 +48,16 @@ func (e Entry) Label() string {
 const (
 	// DefaultDirEnv overrides the session directory.
 	DefaultDirEnv = "PI_CODING_AGENT_SESSION_DIR"
-	// defaultAgentSessions is the fallback under the user's home directory.
-	defaultAgentSessions = ".pi/agent/sessions"
 	// headerLimit caps the header JSON we read from a session file.
 	headerLimit = 1 << 20
 	// tailProbe bounds how much of the file we scan for the display name.
 	tailProbe = 64 << 10
 )
 
-// Dir resolves the session directory. Precedence matches pi: explicit override,
-// then PI_CODING_AGENT_SESSION_DIR, then ~/.pi/agent/sessions.
+// Dir resolves the session directory. Precedence matches pi: explicit
+// override, then PI_CODING_AGENT_SESSION_DIR, then settings.json sessionDir
+// (relative paths resolve from the working directory), then the agent
+// directory's sessions folder.
 func Dir(override string) (string, error) {
 	if override != "" {
 		return override, nil
@@ -63,11 +65,23 @@ func Dir(override string) (string, error) {
 	if env := os.Getenv(DefaultDirEnv); env != "" {
 		return env, nil
 	}
-	home, err := os.UserHomeDir()
+	paths, err := config.ResolvePaths()
 	if err != nil {
-		return "", fmt.Errorf("resolve home directory: %w", err)
+		return "", err
 	}
-	return filepath.Join(home, defaultAgentSessions), nil
+	if settings, loadErr := config.LoadSettings(paths); loadErr == nil {
+		if dir, ok, typeErr := settings.SessionDir(); typeErr == nil && ok {
+			if filepath.IsAbs(dir) {
+				return dir, nil
+			}
+			wd, wdErr := os.Getwd()
+			if wdErr != nil {
+				return "", fmt.Errorf("resolve sessionDir %q: %w", dir, wdErr)
+			}
+			return filepath.Join(wd, dir), nil
+		}
+	}
+	return paths.Sessions(), nil
 }
 
 // List returns the most recently modified sessions, newest first.

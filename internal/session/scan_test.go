@@ -105,14 +105,30 @@ func TestListMissingDirectory(t *testing.T) {
 }
 
 func TestDirPrecedence(t *testing.T) {
+	agentDir := t.TempDir()
+	workDir := t.TempDir()
+	t.Setenv("PI_CODING_AGENT_DIR", agentDir)
 	t.Setenv(DefaultDirEnv, "/from/env")
-	dir, err := Dir("")
-	if err != nil || dir != "/from/env" {
-		t.Fatalf("dir = %q err = %v", dir, err)
+	t.Chdir(workDir)
+
+	if dir, err := Dir(""); err != nil || dir != "/from/env" {
+		t.Fatalf("env dir = %q err = %v", dir, err)
 	}
-	dir, err = Dir("/explicit")
-	if err != nil || dir != "/explicit" {
-		t.Fatalf("dir = %q err = %v", dir, err)
+	if dir, err := Dir("/explicit"); err != nil || dir != "/explicit" {
+		t.Fatalf("explicit dir = %q err = %v", dir, err)
+	}
+
+	t.Setenv(DefaultDirEnv, "")
+	if dir, err := Dir(""); err != nil || dir != filepath.Join(agentDir, "sessions") {
+		t.Fatalf("agent dir = %q err = %v", dir, err)
+	}
+
+	settingsPath := filepath.Join(agentDir, "settings.json")
+	if err := os.WriteFile(settingsPath, []byte(`{"sessionDir": "local-sessions"}`), 0o600); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+	if dir, err := Dir(""); err != nil || dir != filepath.Join(workDir, "local-sessions") {
+		t.Fatalf("settings dir = %q err = %v", dir, err)
 	}
 }
 

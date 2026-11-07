@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -42,6 +43,7 @@ type config struct {
 	name        string
 	session     string
 	sessionDir  string
+	cwd         string
 	noSession   bool
 	noMouse     bool
 	debug       bool
@@ -73,6 +75,12 @@ func run(args []string, stderr io.Writer) int {
 		return exitMissing
 	}
 
+	cwd, err := enterWorkingDir(cfg.cwd)
+	if err != nil {
+		fmt.Fprintf(stderr, "pie-tui: %v\n", err)
+		return exitFailure
+	}
+
 	logger, closeLog := newLogger(cfg.debug, stderr)
 	defer closeLog()
 
@@ -82,6 +90,7 @@ func run(args []string, stderr io.Writer) int {
 	client, err := rpc.Start(ctx, rpc.Options{
 		Bin:    piBinary,
 		Args:   piArgs(cfg),
+		Dir:    cwd,
 		Stderr: nil,
 		Logf:   logger.logf,
 	})
@@ -90,7 +99,6 @@ func run(args []string, stderr io.Writer) int {
 		return exitFailure
 	}
 
-	cwd, _ := os.Getwd()
 	model := ui.New(client, ui.Options{
 		SessionDir: cfg.sessionDir,
 		CWD:        cwd,
@@ -134,6 +142,7 @@ func parseFlags(args []string, stderr io.Writer) (config, error) {
 	fs.StringVar(&cfg.name, "name", "", "session name passed to pi")
 	fs.StringVar(&cfg.session, "session", "", "session file to resume")
 	fs.StringVar(&cfg.sessionDir, "session-dir", "", "session storage directory")
+	fs.StringVar(&cfg.cwd, "cwd", "", "working directory for the session (default: current directory)")
 	fs.BoolVar(&cfg.noSession, "no-session", false, "run without persisting a session")
 	fs.BoolVar(&cfg.noMouse, "no-mouse", false, "disable mouse wheel scrolling")
 	fs.BoolVar(&cfg.debug, "debug", false, "write protocol diagnostics to the state directory")
@@ -192,6 +201,41 @@ func piArgs(cfg config) []string {
 		args = append(args, "--no-session")
 	}
 	return args
+}
+
+// enterWorkingDir changes into the requested directory so the client, the pi
+// child, and every relative configuration path agree. It returns the resolved
+// absolute directory.
+func enterWorkingDir(dir string) (string, error) {
+	if dir == "" {
+		return os.Getwd()
+	}
+	if dir == "~" || strings.HasPrefix(dir, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home directory: %w", err)
+		}
+		if dir == "~" {
+			dir = home
+		} else {
+			dir = filepath.Join(home, dir[2:])
+		}
+	}
+	absolute, err := filepath.Abs(dir)
+	if err != nil {
+		return "", fmt.Errorf("resolve working directory: %w", err)
+	}
+	info, err := os.Stat(absolute)
+	if err != nil {
+		return "", fmt.Errorf("working directory: %w", err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("working directory %s is not a directory", absolute)
+	}
+	if err := os.Chdir(absolute); err != nil {
+		return "", fmt.Errorf("change working directory: %w", err)
+	}
+	return absolute, nil
 }
 
 func printDependencyHelp(stderr io.Writer, err error) {
