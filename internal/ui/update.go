@@ -68,6 +68,7 @@ func (m *Model) handleEvent(event rpc.Event) (tea.Model, tea.Cmd) {
 		// locally when submitted, so nothing to do here. A new assistant message
 		// starts the activity row's estimate and token-rate anchor over.
 		if ev.Message.Role == "assistant" {
+			m.beginAssistantMessage()
 			m.activity.beginMessage()
 		}
 		return m, m.waitEvent()
@@ -192,6 +193,22 @@ func (m *Model) handleEvent(event rpc.Event) (tea.Model, tea.Cmd) {
 	}
 }
 
+// beginAssistantMessage starts fresh per-message stream state. Each
+// assistant message owns its own transcript blocks: without this the next
+// message's text would update a block created before the previous message's
+// tool calls, putting the finished reply above them.
+func (m *Model) beginAssistantMessage() {
+	if m.stream.assistant != nil {
+		m.stream.assistant.streaming = false
+	}
+	if m.stream.thinking != nil {
+		m.stream.thinking.streaming = false
+	}
+	m.stream.assistant = nil
+	m.stream.thinking = nil
+	m.stream.acc.Reset()
+}
+
 // applyStreamUpdate folds a delta into the live assistant block.
 func (m *Model) applyStreamUpdate(update *rpc.MessageUpdateEvent) {
 	kind := update.Assistant.Type
@@ -280,6 +297,10 @@ func (m *Model) applyMessageEnd(message rpc.Message) {
 			block.collapsed = !m.showThinking
 			m.transcript.Add(block)
 		}
+		// Stream state is per message: drop it so the next assistant message
+		// appends fresh blocks after this message's tool calls. message_start
+		// does the same; doing it here too covers backends that skip it.
+		m.beginAssistantMessage()
 		m.transcript.MarkDirty()
 
 	case "toolResult":
@@ -327,7 +348,7 @@ func (m *Model) startTool(event *rpc.ToolExecutionStartEvent) {
 		block.title = strings.TrimSpace(event.ToolName + " " + path)
 		block.meta = fmt.Sprintf("+%d -%d", added, removed)
 		block.body = body
-		block.collapsed = !m.expanded
+		m.syncBlockExpansion(block)
 		block.streaming = true
 		if truncated {
 			block.meta += " (truncated)"
@@ -342,7 +363,7 @@ func (m *Model) startTool(event *rpc.ToolExecutionStartEvent) {
 	block.title = event.ToolName
 	block.meta = toolSummary(event.ToolName, args)
 	block.status = statusRunning
-	block.collapsed = !m.expanded
+	m.syncBlockExpansion(block)
 	block.streaming = true
 	m.transcript.Add(block)
 	m.followOutput()
@@ -355,6 +376,7 @@ func (m *Model) updateTool(event *rpc.ToolExecutionUpdateEvent) {
 	}
 	if preview := toolResultText(event.PartialResult); preview != "" {
 		block.body = preview
+		m.syncBlockExpansion(block)
 		block.invalidate()
 	}
 }
@@ -389,6 +411,7 @@ func (m *Model) endTool(event *rpc.ToolExecutionEndEvent) {
 		}
 	}
 	block.streaming = false
+	m.syncBlockExpansion(block)
 	block.invalidate()
 	m.transcript.MarkDirty()
 }
@@ -406,6 +429,7 @@ func (m *Model) applyToolResult(message rpc.Message) {
 	} else if block.status == statusRunning {
 		block.status = statusOK
 	}
+	m.syncBlockExpansion(block)
 	block.invalidate()
 	m.transcript.MarkDirty()
 }
@@ -440,7 +464,7 @@ func (m *Model) loadHistory(messages []rpc.Message) {
 					block.title = strings.TrimSpace(call.Name + " " + path)
 					block.meta = fmt.Sprintf("+%d -%d", added, removed)
 					block.body = body
-					block.collapsed = true
+					m.syncBlockExpansion(block)
 					m.transcript.Add(block)
 					continue
 				}
@@ -449,7 +473,7 @@ func (m *Model) loadHistory(messages []rpc.Message) {
 				block.title = call.Name
 				block.meta = toolSummary(call.Name, args)
 				block.status = statusPending
-				block.collapsed = true
+				m.syncBlockExpansion(block)
 				m.transcript.Add(block)
 			}
 		case "toolResult":
@@ -465,6 +489,7 @@ func (m *Model) loadHistory(messages []rpc.Message) {
 			} else {
 				block.status = statusOK
 			}
+			m.syncBlockExpansion(block)
 		}
 	}
 	m.transcript.ScrollToBottom()
@@ -638,10 +663,22 @@ func (m *Model) applyThinkingVisibility() {
 	m.transcript.MarkDirty()
 }
 
+// syncBlockExpansion re-evaluates a tool or diff block's default collapsed
+// state after its body changes. Short bodies stay visible like a terminal
+// session; long ones fold to their one-line summary. Running tools keep
+// streaming their output and fold once they finish.
+func (m *Model) syncBlockExpansion(b *block) {
+	if b.kind != blockTool && b.kind != blockDiff {
+		return
+	}
+	streaming := b.streaming && b.kind == blockTool
+	b.collapsed = !m.expanded && !streaming && autoCollapsed(b.kind, b.body)
+}
+
 func (m *Model) applyExpansion() {
 	for _, block := range m.transcript.Blocks() {
 		if block.kind == blockTool || block.kind == blockDiff {
-			block.collapsed = !m.expanded
+			m.syncBlockExpansion(block)
 			block.invalidate()
 		}
 	}

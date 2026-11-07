@@ -699,7 +699,7 @@ func (m *Model) generalSettingsTab() settingsTab {
 		tab.Rows = append(tab.Rows, settingsRow{
 			ID:    "expand-tools",
 			Label: "Expand tool output",
-			Help:  "Start with full tool output and diffs visible (also ctrl+o).",
+			Help:  "Show every tool body in full; when off, long outputs fold (also ctrl+o).",
 			Kind:  settingsToggle,
 			Bool:  m.prefs.ExpandTools,
 			SetBool: func(on bool) error {

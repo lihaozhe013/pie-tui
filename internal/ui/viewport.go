@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -334,6 +335,33 @@ func (t *transcript) renderThinking(b *block, width int) string {
 	return head + "\n" + indentLines(body, "  ")
 }
 
+// Auto-preview thresholds keep the transcript scannable the way mature CLI
+// agents do: short command output and small diffs stay visible like a
+// terminal session while longer bodies fold to their one-line summary.
+// Ctrl+o reveals everything; expandedBodyCap bounds what that renders.
+const (
+	autoToolPreviewLines = 8
+	autoDiffPreviewLines = 16
+	expandedBodyCap      = 200
+)
+
+// bodyLines counts the rendered lines of a block body.
+func bodyLines(body string) int {
+	body = strings.TrimRight(body, "\n")
+	if body == "" {
+		return 0
+	}
+	return strings.Count(body, "\n") + 1
+}
+
+// autoCollapsed reports whether a body exceeds its default preview size.
+func autoCollapsed(kind blockKind, body string) bool {
+	if kind == blockDiff {
+		return bodyLines(body) > autoDiffPreviewLines
+	}
+	return bodyLines(body) > autoToolPreviewLines
+}
+
 func (t *transcript) renderTool(b *block, width int) string {
 	marker := "~"
 	color := t.styles.toolLine
@@ -358,22 +386,24 @@ func (t *transcript) renderTool(b *block, width int) string {
 		head += " " + t.styles.errorText.Render("failed")
 	}
 
-	if b.collapsed || strings.TrimSpace(b.body) == "" {
+	if strings.TrimSpace(b.body) == "" {
 		return head
 	}
 
-	body := strings.TrimRight(b.body, "\n")
-	lines := strings.Split(body, "\n")
-	const maxCollapsedLines = 20
-	truncated := false
-	if len(lines) > maxCollapsedLines {
-		lines = lines[:maxCollapsedLines]
-		truncated = true
+	lines := strings.Split(strings.TrimRight(b.body, "\n"), "\n")
+	if b.collapsed {
+		return head + "\n  " + t.styles.faint.Render(fmt.Sprintf("… +%d lines (ctrl+o)", len(lines)))
+	}
+
+	hidden := 0
+	if len(lines) > expandedBodyCap {
+		hidden = len(lines) - expandedBodyCap
+		lines = lines[:expandedBodyCap]
 	}
 	wrapped := t.styles.toolMeta.Width(width - 2).Render(strings.Join(lines, "\n"))
 	out := head + "\n" + indentLines(wrapped, "  ")
-	if truncated {
-		out += "\n  " + t.styles.faint.Render("… press ctrl+o to expand")
+	if hidden > 0 {
+		out += "\n  " + t.styles.faint.Render(fmt.Sprintf("… +%d more lines", hidden))
 	}
 	return out
 }
@@ -383,14 +413,24 @@ func (t *transcript) renderDiffBlock(b *block, width int) string {
 	if b.meta != "" {
 		head += " " + t.renderDiffMeta(b.meta)
 	}
-	if b.collapsed || strings.TrimSpace(b.body) == "" {
+	if strings.TrimSpace(b.body) == "" {
 		return head
 	}
 
+	lines := strings.Split(strings.TrimRight(b.body, "\n"), "\n")
+	if b.collapsed {
+		return head + "\n  " + t.styles.faint.Render(fmt.Sprintf("… +%d lines (ctrl+o)", len(lines)))
+	}
+
+	hidden := 0
+	if len(lines) > expandedBodyCap {
+		hidden = len(lines) - expandedBodyCap
+		lines = lines[:expandedBodyCap]
+	}
 	clip := lipgloss.NewStyle().MaxWidth(maxInt(width-2, 8))
 	var out strings.Builder
 	out.WriteString(head)
-	for _, line := range strings.Split(b.body, "\n") {
+	for _, line := range lines {
 		style := t.styles.diffMeta
 		switch {
 		case strings.HasPrefix(line, "+"):
@@ -400,6 +440,9 @@ func (t *transcript) renderDiffBlock(b *block, width int) string {
 		}
 		out.WriteString("\n  ")
 		out.WriteString(style.Render(clip.Render(line)))
+	}
+	if hidden > 0 {
+		out.WriteString("\n  " + t.styles.faint.Render(fmt.Sprintf("… +%d more lines", hidden)))
 	}
 	return out.String()
 }
