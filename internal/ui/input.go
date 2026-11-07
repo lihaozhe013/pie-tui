@@ -80,6 +80,12 @@ func (c *composer) SetMaxRows(rows int) {
 	c.resize()
 }
 
+// SetStyles swaps the palette used by the editor's placeholder.
+func (c *composer) SetStyles(st styles) {
+	c.styles = st
+	c.ta.FocusedStyle.Placeholder = c.ta.FocusedStyle.Placeholder.Foreground(st.theme.Muted)
+}
+
 func (c *composer) Value() string { return c.ta.Value() }
 func (c *composer) Reset() {
 	c.ta.Reset()

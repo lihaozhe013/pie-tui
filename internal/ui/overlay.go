@@ -19,6 +19,7 @@ const (
 	overlayConfirm
 	overlayInput
 	overlayEditor
+	overlaySettings
 )
 
 // pickerItem is one selectable row.
@@ -44,6 +45,8 @@ type overlay struct {
 
 	requestID string
 	width     int
+	height    int
+	settings  *settingsState
 }
 
 const maxPickerRows = 10
@@ -183,15 +186,20 @@ func (o *overlay) Update(msg tea.Msg) tea.Cmd {
 }
 
 // Resize sizes the modal to the available area.
-func (o *overlay) Resize(width int) {
+func (o *overlay) Resize(width, height int) {
 	boxWidth := width - 8
-	if boxWidth > 72 {
-		boxWidth = 72
+	maxWidth := 72
+	if o.kind == overlaySettings {
+		maxWidth = 96
+	}
+	if boxWidth > maxWidth {
+		boxWidth = maxWidth
 	}
 	if boxWidth < 24 {
 		boxWidth = 24
 	}
 	o.width = boxWidth
+	o.height = height
 	if o.kind == overlayPicker || o.kind == overlayInput {
 		o.filter.Width = boxWidth - 8
 	}
@@ -202,6 +210,13 @@ func (o *overlay) Resize(width int) {
 
 // View renders the modal box.
 func (o *overlay) View(st styles) string {
+	if o.kind == overlaySettings {
+		if o.settings == nil {
+			return st.overlayBox.Render("settings unavailable")
+		}
+		return o.settings.View(st, o.width+8, o.height)
+	}
+
 	var body strings.Builder
 
 	switch o.kind {

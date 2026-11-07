@@ -12,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/lihaozhe/pie-tui/internal/config"
 	"github.com/lihaozhe/pie-tui/internal/rpc"
 	"github.com/lihaozhe/pie-tui/internal/session"
 )
@@ -149,22 +150,71 @@ type Model struct {
 	ctrlCAt      time.Time
 
 	dialogs []*rpc.ExtensionUIRequestEvent
+
+	paths              config.Paths
+	settings           *config.Settings
+	prefs              *config.TUIConfig
+	configErr          error
+	settingsPanel      *settingsState
+	pendingSettingsRow *settingsRow
 }
 
 // New builds the model around a connected client.
 func New(client Client, opts Options) *Model {
-	st := newStyles(defaultTheme())
+	paths, err := config.ResolvePaths()
 	m := &Model{
-		client:     client,
-		styles:     st,
-		opts:       opts,
-		transcript: newTranscript(st),
-		composer:   newComposer(st),
-		completion: &completion{},
-		statuses:   map[string]string{},
+		client:       client,
+		opts:         opts,
+		paths:        paths,
+		statuses:     map[string]string{},
+		showThinking: true,
 	}
+	if err != nil {
+		m.configErr = err
+	} else {
+		m.reloadConfig()
+	}
+
+	themeID := "auto"
+	if m.prefs != nil {
+		themeID = m.prefs.Theme()
+		m.showThinking = m.prefs.ShowThinking()
+		m.expanded = m.prefs.ExpandTools()
+	}
+	m.styles = newStyles(themeFor(themeID))
+	m.transcript = newTranscript(m.styles)
+	m.composer = newComposer(m.styles)
+	m.completion = &completion{}
 	m.completion.SetItems(builtinCommands())
 	return m
+}
+
+// reloadConfig refreshes the shared settings and terminal preferences from
+// disk. A broken file disables the rows that need it instead of failing the
+// whole client.
+func (m *Model) reloadConfig() {
+	if m.paths.Dir == "" {
+		paths, err := config.ResolvePaths()
+		if err != nil {
+			m.configErr = err
+			return
+		}
+		m.paths = paths
+	}
+	settings, err := config.LoadSettings(m.paths)
+	if err != nil {
+		m.configErr = err
+		m.settings = nil
+	} else {
+		m.configErr = nil
+		m.settings = settings
+	}
+	prefs, err := config.LoadTUIConfig(m.paths)
+	if err != nil {
+		m.prefs = nil
+	} else {
+		m.prefs = prefs
+	}
 }
 
 // Init starts the event pump, the startup handshake, and the idle heartbeat.
@@ -421,7 +471,7 @@ func (m *Model) layout() {
 	m.body = body
 	m.transcript.SetSize(m.width, body)
 	if m.overlay != nil {
-		m.overlay.Resize(m.width)
+		m.overlay.Resize(m.width, m.body)
 	}
 }
 

@@ -213,7 +213,7 @@ func TestOverlayPickerFiltersAndSelects(t *testing.T) {
 		{Value: "openai/gpt", Label: "openai/gpt", Detail: "GPT"},
 	}
 	overlay := newPickerOverlay("model", "Switch model", items)
-	overlay.Resize(80)
+	overlay.Resize(80, 30)
 
 	overlay.filter.SetValue("gpt")
 	overlay.refilter()

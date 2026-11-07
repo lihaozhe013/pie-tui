@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/lihaozhe/pie-tui/internal/config"
 	"github.com/lihaozhe/pie-tui/internal/rpc"
 	"github.com/lihaozhe/pie-tui/internal/session"
 )
@@ -498,6 +499,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+k":
 		return m, m.openModelPicker()
 
+	case "ctrl+p":
+		return m, m.openSettings()
+
 	case "ctrl+t":
 		m.showThinking = !m.showThinking
 		m.applyThinkingVisibility()
@@ -699,6 +703,8 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 		overlay.action = "session-name"
 		m.openOverlay(overlay)
 		return nil, true
+	case "/settings":
+		return m.openSettings(), true
 	default:
 		return nil, false
 	}
@@ -712,6 +718,7 @@ func (m *Model) helpItems() []pickerItem {
 		{"esc", "interrupt the running turn"},
 		{"ctrl+c", "interrupt, twice to quit"},
 		{"ctrl+k", "pick a model"},
+		{"ctrl+p", "open settings"},
 		{"shift+tab", "cycle thinking level"},
 		{"ctrl+t", "toggle thinking blocks"},
 		{"ctrl+o", "expand tool output and diffs"},
@@ -1015,7 +1022,7 @@ func (m *Model) openExtensionOverlay(request *rpc.ExtensionUIRequestEvent) {
 
 func (m *Model) openOverlay(o *overlay) {
 	m.overlay = o
-	o.Resize(m.width)
+	o.Resize(m.width, m.body)
 	m.completion.Hide()
 	m.layout()
 }
@@ -1032,6 +1039,9 @@ func (m *Model) closeOverlay() {
 
 // handleOverlayKey routes keys while a modal is open.
 func (m *Model) handleOverlayKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.overlay.kind == overlaySettings {
+		return m.handleSettingsKey(msg)
+	}
 	key := msg.String()
 	o := m.overlay
 
@@ -1045,6 +1055,11 @@ func (m *Model) handleOverlayKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				_ = client.Send(rpc.ExtensionUICancelled(id))
 				return nil
 			}
+		}
+		if o.action == "settings-choice" || o.action == "settings-agents" {
+			m.pendingSettingsRow = nil
+			m.openSettingsOverlay()
+			return m, nil
 		}
 		m.closeOverlay()
 		return m, nil
@@ -1125,6 +1140,9 @@ func (m *Model) selectOverlayItem() tea.Cmd {
 		case "session-name":
 			m.closeOverlay()
 			return m.setSessionName(item.Value)
+		case "settings-choice":
+			m.closeOverlay()
+			return m.applySettingChoice(item.Value)
 		default:
 			m.closeOverlay()
 			return nil
@@ -1152,6 +1170,17 @@ func (m *Model) answerInput(value string) tea.Cmd {
 
 	if action == "session-name" {
 		return m.setSessionName(value)
+	}
+	if action == "settings-agents" {
+		if err := config.WriteInstructions(m.paths, value); err != nil {
+			if m.settingsPanel != nil {
+				m.settingsPanel.err = "save AGENTS.md: " + err.Error()
+			}
+		} else if m.settingsPanel != nil {
+			m.settingsPanel.notice = "instructions saved"
+		}
+		m.openSettingsOverlay()
+		return nil
 	}
 	return func() tea.Msg {
 		_ = client.Send(rpc.ExtensionUIValue(id, value))

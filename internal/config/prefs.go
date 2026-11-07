@@ -131,6 +131,34 @@ func (c *TUIConfig) SetShowToolCards(enabled bool) error {
 	return c.update(func(root *Value) { root.SetBool("showToolCards", enabled) })
 }
 
+// ShowThinking reports whether thinking blocks are visible. Default true.
+func (c *TUIConfig) ShowThinking() bool {
+	value := c.root.Get("showThinking")
+	if value == nil {
+		return true
+	}
+	return value.BoolOr(true)
+}
+
+// SetShowThinking saves the thinking-block visibility preference.
+func (c *TUIConfig) SetShowThinking(enabled bool) error {
+	return c.update(func(root *Value) { root.SetBool("showThinking", enabled) })
+}
+
+// ExpandTools reports whether tool output starts expanded. Default false.
+func (c *TUIConfig) ExpandTools() bool {
+	value := c.root.Get("expandTools")
+	if value == nil {
+		return false
+	}
+	return value.BoolOr(false)
+}
+
+// SetExpandTools saves the default tool expansion.
+func (c *TUIConfig) SetExpandTools(enabled bool) error {
+	return c.update(func(root *Value) { root.SetBool("expandTools", enabled) })
+}
+
 func (c *TUIConfig) update(fn func(root *Value)) error {
 	err := Update(c.path, func(root *Value) error {
 		fn(root)

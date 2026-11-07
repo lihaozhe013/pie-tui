@@ -25,6 +25,11 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
 - Thinking blocks (collapsible), follow-up queueing, steering, and abort
 - Model picker, thinking-level cycling, session rename/resume/new, compaction,
   HTML export, and token/context statistics
+- A settings panel (`/settings` or `ctrl+p`) with the same tabs as the Pie web
+  UI, sharing pi's files: `settings.json`, `models.json`, `AGENTS.md`, and the
+  `pie-*` companion files in the agent directory
+- Pie's 18 color themes, applied instantly and saved to the terminal-only
+  preferences file
 - Extension UI support: confirm/select/input/editor dialogs, notifications,
   status entries, window titles, and editor prefills
 - Survives upgrades: unknown protocol records are ignored rather than fatal
@@ -55,8 +60,12 @@ pie-tui                       # resume is offered from the picker
 pie-tui --model anthropic/claude-sonnet-4
 pie-tui --no-session          # ephemeral, nothing is written to disk
 pie-tui --session ~/.pi/agent/sessions/--Users-me-proj--/2024_x.jsonl
+pie-tui --cwd ~/src/project   # start in another working directory
 pie-tui --debug               # protocol log in ~/.local/state/pie-tui/
 ```
+
+The agent directory is `PI_CODING_AGENT_DIR` when set, otherwise
+`~/.pi/agent`; the client and pi always read the same one.
 
 Flags are forwarded to pi where they overlap (`--provider`, `--model`, `--name`,
 `--session`, `--session-dir`, `--no-session`).
@@ -72,6 +81,7 @@ Flags are forwarded to pi where they overlap (`--provider`, `--model`, `--name`,
 | `ctrl+c` | interrupt; press twice to quit |
 | `ctrl+d` | quit when the editor is empty |
 | `ctrl+k` | pick a model |
+| `ctrl+p` | open settings |
 | `shift+tab` | cycle the thinking level |
 | `ctrl+t` | show/hide thinking blocks |
 | `ctrl+o` | expand or collapse tool output and diffs |
@@ -87,6 +97,7 @@ memory from other CLIs keeps working.
 
 | Command | Aliases | Description |
 |---|---|---|
+| `/settings` | `/config`, `/prefs` | open the settings panel |
 | `/model` | `/models` | switch model |
 | `/think` | | cycle the thinking level |
 | `/new` | | start a new session |
