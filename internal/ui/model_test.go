@@ -191,7 +191,7 @@ func newTestModel(t *testing.T) (*Model, *fakeClient) {
 		return &rpc.Response{Command: "get_commands", Success: true, Data: []byte(`{"commands":[{"name":"fix-tests","description":"Fix failing tests","source":"prompt"}]}`)}
 	})
 
-	model := New(client, Options{Version: "test", CWD: "/work/dir"})
+	model := New(client, Options{Version: "test", CWD: "/work/dir", AgentDir: t.TempDir()})
 	model, _ = step(t, model, tea.WindowSizeMsg{Width: 100, Height: 30})
 	model, _ = step(t, model, model.handshake()())
 	// The picker tests predate the settings layer; an isolated catalog keeps

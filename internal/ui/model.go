@@ -47,6 +47,9 @@ type Options struct {
 	// Restart starts a fresh pi in dir, used when the working directory
 	// changes. Nil disables project switching.
 	Restart func(dir string) (Client, error)
+	// AgentDir overrides PI_CODING_AGENT_DIR. Tests use it to keep the
+	// developer's real configuration out of the run.
+	AgentDir string
 }
 
 // Timing constants for the event loop.
@@ -247,7 +250,13 @@ type Model struct {
 
 // New builds the model around a connected client.
 func New(client Client, opts Options) *Model {
-	paths, err := config.ResolvePaths()
+	var paths config.Paths
+	var err error
+	if opts.AgentDir != "" {
+		paths = config.Paths{Dir: opts.AgentDir}
+	} else {
+		paths, err = config.ResolvePaths()
+	}
 	m := &Model{
 		client:       client,
 		opts:         opts,
