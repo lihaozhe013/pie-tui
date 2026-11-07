@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/lihaozhe/pie-tui/internal/rpc"
 )
 
@@ -114,6 +115,9 @@ func newEditorOverlay(request *rpc.ExtensionUIRequestEvent) *overlay {
 	editor.SetHeight(8)
 	editor.ShowLineNumbers = false
 	editor.Prompt = ""
+	// The widget's default cursor line paints a solid background across the
+	// whole line, which fights the modal's palette.
+	editor.FocusedStyle.CursorLine = lipgloss.NewStyle()
 	editor.Focus()
 
 	return &overlay{
