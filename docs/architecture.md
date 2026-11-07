@@ -126,6 +126,16 @@ clients keeps its preset and its Plan mode. If the extension fails to load, the
 UI reports `unavailable` in Settings › General and refuses preset changes
 rather than silently diverging.
 
+Goals are the goal package's, not the client's. `internal/session` reads the
+newest `custom` entry whose `customType` is `pi-better-goal` or
+`pi-codex-goal`; `set` supplies the status, objective, and usage, and `clear`
+retracts it. The `/goal` command opens a panel that only sends `/goal …`
+prompts to the installed package, which owns continuations and completion. The
+package is never bundled: availability is the `goal` command reported by
+`get_commands`, and the terminal-only `goalEnabled` preference refuses to turn
+on without it. `pie-tui` writes no goal state of its own, so a goal started in
+Pie appears in the header here and the reverse.
+
 Settings › Models merges three sources without a second cache:
 `models-store.json` (pi's catalog), `models.json` (custom providers, models,
 and model overrides), and `get_available_models` (what the running agent

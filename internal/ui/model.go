@@ -205,6 +205,11 @@ type Model struct {
 	selection     session.ToolSelection
 	hasSelection  bool
 	currentMode   string
+
+	goalAvailable bool
+	goalEnabled   bool
+	goal          session.Goal
+	hasGoal       bool
 }
 
 // New builds the model around a connected client.
@@ -228,6 +233,7 @@ func New(client Client, opts Options) *Model {
 		themeID = m.prefs.Theme()
 		m.showThinking = m.prefs.ShowThinking()
 		m.expanded = m.prefs.ExpandTools()
+		m.goalEnabled = m.prefs.GoalEnabled()
 	}
 	m.styles = newStyles(themeFor(themeID))
 	m.transcript = newTranscript(m.styles)
@@ -485,6 +491,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loadHistory(msg.messages)
 		return m, nil
 
+	case entriesMsg:
+		if msg.err != nil {
+			// Entries are best effort: the session still works without them.
+			return m, nil
+		}
+		m.logEntries = msg.entries
+		m.selection, m.hasSelection = session.ReadToolSelection(m.logEntries)
+		m.currentMode = session.ReadWorkMode(m.logEntries)
+		m.goal, m.hasGoal = session.ReadGoal(m.logEntries)
+		if m.overlay != nil && m.overlay.action == "goal" {
+			m.openGoalPanel()
+		}
+		return m, nil
+
 	case titleMsg:
 		if msg.err != nil {
 			m.addError("title: " + msg.err.Error())
@@ -516,6 +536,7 @@ func (m *Model) applyHandshake(msg handshakeMsg) (tea.Model, tea.Cmd) {
 	m.commands = msg.commands
 	m.stats = msg.stats
 	m.bridgeReady = m.hasPiCommand("pie-tools")
+	m.goalAvailable = m.hasPiCommand("goal")
 	m.reloadCatalog()
 	m.completion.SetItems(m.commandItems())
 	m.loadHistory(msg.history)
@@ -713,6 +734,9 @@ func (m *Model) renderHeader() string {
 	}
 	if id := m.currentPresetID(); id != "configured" {
 		segments = append(segments, m.styles.muted.Render("tools:"+m.presetLabel(id)))
+	}
+	if goal := m.goalStatusSegment(); goal != "" {
+		segments = append(segments, m.styles.muted.Render(goal))
 	}
 
 	return truncateLine(strings.Join(segments, m.styles.muted.Render(" · ")), m.width)

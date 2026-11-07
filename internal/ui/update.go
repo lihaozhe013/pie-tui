@@ -83,6 +83,12 @@ func (m *Model) handleEvent(event rpc.Event) (tea.Model, tea.Cmd) {
 			m.logEntries = append(m.logEntries, entry)
 			m.selection, m.hasSelection = session.ReadToolSelection(m.logEntries)
 			m.currentMode = session.ReadWorkMode(m.logEntries)
+			if isGoalLogEntry(entry) {
+				m.goal, m.hasGoal = session.ReadGoal(m.logEntries)
+				if m.overlay != nil && m.overlay.action == "goal" {
+					m.openGoalPanel()
+				}
+			}
 		}
 		return m, m.waitEvent()
 
@@ -668,6 +674,15 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 	fields := strings.Fields(text)
 	name := fields[0]
 	argument := strings.TrimSpace(strings.TrimPrefix(text, name))
+
+	// The goal package owns every argument form, but the bare command opens
+	// the terminal's status panel so the objective and controls are reachable.
+	if name == "/goal" {
+		if argument == "" || !m.goalAvailable {
+			return m.openGoalPanel(), true
+		}
+		return nil, false
+	}
 
 	target, known := builtinIndex[name]
 	if !known || (target.alias && m.piOwns(name)) {

@@ -35,6 +35,12 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   limit, startup defaults, enabled-model patterns, per-model thinking levels,
   provider credentials, and custom provider and model editors (including
   compatibility endpoints, costs, and thinking maps)
+- Goal controls through a manually installed goal package: `/goal` shows the
+  status, objective, token usage, and the start, pause, resume, complete, and
+  clear actions; the header carries the status. `pie-tui` never bundles the
+  package. Enable the panel in Settings › General after installing
+  `pi-better-goal`; enabling it without the package is refused with the install
+  command
 - Pie's 18 color themes, applied instantly and saved to the terminal-only
   preferences file
 - A bundled bridge extension (loaded with `-e`) that adds hot tool switching,
@@ -116,6 +122,7 @@ memory from other CLIs keeps working.
 | `/compact` | `/compress` | compact the conversation |
 | `/name` | `/rename` | rename this session |
 | `/title` | | generate a title from the transcript with a one-shot model call |
+| `/goal` | | goal status and controls; arguments are forwarded to the goal package |
 | `/export` | | export the session as HTML |
 | `/stats` | `/status`, `/usage` | show token and context usage |
 | `/clear` | `/cls` | clear the scrollback |

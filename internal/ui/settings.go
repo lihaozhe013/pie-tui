@@ -526,7 +526,9 @@ func (m *Model) openSettings() tea.Cmd {
 }
 
 func (m *Model) openSettingsOverlay() {
-	if m.settingsPanel == nil {
+	// A single-tab panel (goal, preset editor, provider editor) owns its rows;
+	// reopening Settings must go back to the main tabs rather than that panel.
+	if m.settingsPanel == nil || m.settingsPanel.single {
 		m.settingsPanel = newSettingsState(m)
 	} else {
 		m.settingsPanel.rebuild(m)
@@ -668,6 +670,23 @@ func (m *Model) generalSettingsTab() settingsTab {
 				}
 				m.showThinking = on
 				m.applyThinkingVisibility()
+				return nil
+			},
+		})
+		tab.Rows = append(tab.Rows, settingsRow{
+			ID:    "goal-enabled",
+			Label: "Goal controls",
+			Help:  "Requires the goal package: " + goalInstallHint + ". Install it, restart pie-tui, then enable this.",
+			Kind:  settingsToggle,
+			Bool:  func() bool { return m.goalEnabled },
+			SetBool: func(on bool) error {
+				if on && !m.goalAvailable {
+					return fmt.Errorf("the goal package is not installed; run: %s and restart", goalInstallHint)
+				}
+				if err := m.prefs.SetGoalEnabled(on); err != nil {
+					return err
+				}
+				m.goalEnabled = on
 				return nil
 			},
 		})
