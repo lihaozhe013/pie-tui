@@ -27,6 +27,7 @@ func (m *Model) modelsSettingsTab() settingsTab {
 		Label: "Models",
 		Note:  "The catalog comes from pi; models.json overrides it.",
 	}
+	projectScope := m.projectModelScope()
 
 	if m.catalogErr != nil {
 		tab.Rows = append(tab.Rows, settingsRow{
@@ -175,7 +176,7 @@ func (m *Model) modelsSettingsTab() settingsTab {
 			ID:      "project-scope",
 			Label:   "Project settings",
 			Kind:    settingsInfo,
-			Current: func() string { return m.projectModelScope() },
+			Current: func() string { return projectScope },
 			Help:    "A project .pi/settings.json key wins over the global value this panel edits.",
 		},
 		settingsRow{
