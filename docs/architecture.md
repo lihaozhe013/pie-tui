@@ -94,7 +94,13 @@ break the resume picker.
   extraction for the clipboard.
 - `clipboard.go` — OSC52 plus platform clipboard commands, run asynchronously
   so a slow clipboard tool cannot stall the event loop.
-- `input.go` — multi-line composer, prompt history, and slash completion.
+- `input.go` — the prompt editor and slash completion. The editor is written
+  directly against the buffer instead of nesting `bubbles/textarea`: the
+  widget paints a full-line cursor background, moves across logical lines and
+  hides its own scrollbar, none of which fit a soft-wrapped composer. The
+  custom editor owns wrapping, the caret cell, the sticky column for vertical
+  movement, and the scroll offset, so the box height and the visible rows
+  always agree.
 - `overlay.go` — pickers and extension dialogs.
 - `diff.go` — tool argument/result extraction and a dependency-free line diff.
 - `styles.go` — the Lip Gloss palette and the glamour style derived from it.

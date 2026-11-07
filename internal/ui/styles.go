@@ -78,20 +78,23 @@ type styles struct {
 	muted           lipgloss.Style
 	accent          lipgloss.Style
 
-	editorBox   lipgloss.Style
-	editorHint  lipgloss.Style
-	scrollRail  lipgloss.Style
-	scrollThumb lipgloss.Style
-	completion  lipgloss.Style
-	compActive  lipgloss.Style
-	overlayBox  lipgloss.Style
-	overlayHead lipgloss.Style
-	overlayHint lipgloss.Style
-	pickerItem  lipgloss.Style
-	pickerSel   lipgloss.Style
-	diffAdd     lipgloss.Style
-	diffDel     lipgloss.Style
-	diffMeta    lipgloss.Style
+	editorBox         lipgloss.Style
+	editorHint        lipgloss.Style
+	editorText        lipgloss.Style
+	editorCursor      lipgloss.Style
+	editorPlaceholder lipgloss.Style
+	scrollRail        lipgloss.Style
+	scrollThumb       lipgloss.Style
+	completion        lipgloss.Style
+	compActive        lipgloss.Style
+	overlayBox        lipgloss.Style
+	overlayHead       lipgloss.Style
+	overlayHint       lipgloss.Style
+	pickerItem        lipgloss.Style
+	pickerSel         lipgloss.Style
+	diffAdd           lipgloss.Style
+	diffDel           lipgloss.Style
+	diffMeta          lipgloss.Style
 }
 
 func newStyles(t theme) styles {
@@ -127,9 +130,12 @@ func newStyles(t theme) styles {
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(t.Border).
 			Padding(0, 1),
-		editorHint:  lipgloss.NewStyle().Foreground(t.Faint),
-		scrollRail:  lipgloss.NewStyle().Foreground(t.Faint),
-		scrollThumb: lipgloss.NewStyle().Foreground(t.AccentSoft),
+		editorHint:        lipgloss.NewStyle().Foreground(t.Faint),
+		editorText:        lipgloss.NewStyle().Foreground(t.Base),
+		editorCursor:      lipgloss.NewStyle().Reverse(true),
+		editorPlaceholder: lipgloss.NewStyle().Foreground(t.Muted),
+		scrollRail:        lipgloss.NewStyle().Foreground(t.Faint),
+		scrollThumb:       lipgloss.NewStyle().Foreground(t.AccentSoft),
 		completion: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(t.Border).

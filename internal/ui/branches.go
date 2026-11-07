@@ -120,6 +120,7 @@ func (m *Model) applyForkResult(msg forkResultMsg) (tea.Model, tea.Cmd) {
 	m.sessionEpoch.Add(1)
 	m.loadHistory(msg.messages)
 	m.composer.SetText(msg.text)
+	m.completion.Refresh(m.composer.Value())
 	m.transcript.ScrollToBottom()
 	m.logEntries = nil
 	m.autoTitlePending = false

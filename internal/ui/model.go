@@ -553,6 +553,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case abortMsg:
 		if len(msg.restored) > 0 {
 			m.composer.SetText(strings.Join(msg.restored, "\n"))
+			m.completion.Refresh(m.composer.Value())
+			// The restored draft can be much taller than the submitted prompt,
+			// so the body must give the editor its rows back.
+			m.layout()
 		}
 		if msg.err != nil {
 			m.addError(msg.err.Error())

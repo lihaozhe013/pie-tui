@@ -5,11 +5,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-runewidth"
-	"github.com/rivo/uniseg"
 )
 
 // composerMaxRows caps the number of rows the composer shows before the rest
@@ -17,15 +14,35 @@ import (
 // a paragraph, not so much that the transcript disappears.
 const composerMaxRows = 8
 
-// composer is the multi-line prompt editor. Enter submits, so newline insertion
-// is bound to explicit key combinations.
+const composerPlaceholder = "Ask pi anything…  (ctrl+p for commands · /help)"
+
+// composerRow is one visual row of the buffer after soft wrapping. Rows are
+// contiguous slices of the buffer: end is the index of the wrapping point, a
+// newline, or the buffer length.
+type composerRow struct {
+	start int
+	end   int
+}
+
+// composer is the multi-line prompt editor. It is a small, self-contained
+// editor instead of a wrapped textarea widget so the cursor, the soft wrapping,
+// the scroll offset and the box height always agree.
+//
+// Enter submits, so newline insertion is bound to explicit chords. Vertical
+// movement follows visual rows (wrapped lines included) and keeps a sticky
+// column, the way full-screen editors behave.
 type composer struct {
-	ta      textarea.Model
-	styles  styles
-	width   int
-	maxRows int // visible row cap, lowered on very short terminals
-	rows    int // visual rows the current buffer occupies after soft wrapping
-	offset  int // first visible row, mirrored from the textarea viewport
+	styles styles
+
+	value  []rune
+	cursor int // rune index of the caret, 0..len(value)
+
+	width   int // content columns inside the editor box, scrollbar included
+	maxRows int // configured upper bound, lowered on very short terminals
+	visible int // rows currently reserved by the box
+	rows    []composerRow
+	scroll  int // index of the first visible row
+	goalCol int // sticky column for vertical movement, -1 when unset
 
 	history []string
 	histAt  int
@@ -33,26 +50,20 @@ type composer struct {
 }
 
 func newComposer(st styles) *composer {
-	ta := textarea.New()
-	ta.Placeholder = "Ask pi anything…  (ctrl+p for commands · /help)"
-	ta.ShowLineNumbers = false
-	ta.CharLimit = 0
-	// MaxHeight also limits the number of logical lines; leave it unlimited and
-	// cap the visible height ourselves instead.
-	ta.MaxHeight = 0
-	ta.SetHeight(1)
-	ta.Prompt = ""
-	ta.FocusedStyle.Placeholder = ta.FocusedStyle.Placeholder.Foreground(st.theme.Muted)
-	ta.KeyMap.InsertNewline = key.NewBinding(
-		key.WithKeys("alt+enter", "ctrl+j"),
-		key.WithHelp("alt+enter", "newline"),
-	)
-	ta.Focus()
-
-	return &composer{ta: ta, styles: st, maxRows: composerMaxRows, rows: 1, histAt: -1}
+	c := &composer{
+		styles:  st,
+		width:   80,
+		maxRows: composerMaxRows,
+		visible: 1,
+		goalCol: -1,
+		histAt:  -1,
+	}
+	c.rewrap()
+	return c
 }
 
-// SetWidth reserves the rightmost column for the scrollbar.
+// SetWidth sets the content width of the editor box. One column is reserved
+// for the scrollbar so the buffer does not rewrap when it appears.
 func (c *composer) SetWidth(width int) {
 	if width < 10 {
 		width = 10
@@ -61,8 +72,7 @@ func (c *composer) SetWidth(width int) {
 		return
 	}
 	c.width = width
-	c.ta.SetWidth(maxInt(1, width-1))
-	c.resize()
+	c.rewrap()
 }
 
 // SetMaxRows lowers the visible row cap so the composer fits a short terminal.
@@ -77,236 +87,169 @@ func (c *composer) SetMaxRows(rows int) {
 		return
 	}
 	c.maxRows = rows
-	c.resize()
+	c.updateViewport()
 }
 
-// SetStyles swaps the palette used by the editor's placeholder.
+// SetStyles swaps the palette used by the editor.
 func (c *composer) SetStyles(st styles) {
 	c.styles = st
-	c.ta.FocusedStyle.Placeholder = c.ta.FocusedStyle.Placeholder.Foreground(st.theme.Muted)
 }
 
-func (c *composer) Value() string { return c.ta.Value() }
+func (c *composer) Value() string { return string(c.value) }
+func (c *composer) Height() int   { return c.visible }
+func (c *composer) Empty() bool   { return strings.TrimSpace(string(c.value)) == "" }
+
 func (c *composer) Reset() {
-	c.ta.Reset()
-	c.ta.SetHeight(1)
-	c.offset = 0
-	c.rows = 1
+	c.value = nil
+	c.cursor = 0
+	c.scroll = 0
+	c.goalCol = -1
 	c.histAt = -1
 	c.draft = ""
-}
-func (c *composer) Empty() bool { return strings.TrimSpace(c.ta.Value()) == "" }
-func (c *composer) Height() int { return maxInt(1, c.ta.Height()) }
-func (c *composer) Update(msg tea.Msg) tea.Cmd {
-	var cmd tea.Cmd
-	c.ta, cmd = c.ta.Update(msg)
-	c.resize()
-	return cmd
-}
-
-func (c *composer) SetValue(value string) {
-	c.ta.SetValue(value)
-	c.resize()
+	c.rewrap()
 }
 
 // SetText replaces the content and moves the cursor to the end.
 func (c *composer) SetText(value string) {
-	c.ta.SetValue(value)
-	c.ta.CursorEnd()
-	c.resize()
+	c.value = []rune(normalizeComposerText(value))
+	c.cursor = len(c.value)
+	c.goalCol = -1
+	c.rewrap()
 }
 
 func (c *composer) InsertNewline() {
-	c.ta.InsertString("\n")
-	c.resize()
+	c.insert("\n")
 }
 
-// View renders the editor with a one-column scrollbar when the buffer is
-// taller than the visible area.
-func (c *composer) View() string {
-	view := c.ta.View()
-	height := c.ta.Height()
-	if c.rows <= height || height < 1 {
-		return view
+// TakeNewlineEscape replaces a trailing backslash with a newline. It gives
+// terminals that cannot report shift+enter a portable newline chord, which is
+// also what Codex and Claude Code accept.
+func (c *composer) TakeNewlineEscape() bool {
+	if c.cursor != len(c.value) || len(c.value) == 0 {
+		return false
 	}
-
-	track := c.scrollbar(height)
-	lines := strings.Split(view, "\n")
-	for i, line := range lines {
-		if i >= len(track) {
-			break
-		}
-		lines[i] = line + track[i]
+	if c.value[len(c.value)-1] != '\\' {
+		return false
 	}
-	return strings.Join(lines, "\n")
+	c.splice(len(c.value)-1, len(c.value))
+	c.insert("\n")
+	return true
 }
 
-// scrollbar builds the vertical track: a dim rail with a thumb whose size and
-// position reflect the visible fraction of the buffer.
-func (c *composer) scrollbar(height int) []string {
-	track := make([]string, height)
-	if height < 1 || c.rows <= height {
-		return track
+// Update applies one input message to the buffer.
+func (c *composer) Update(msg tea.Msg) tea.Cmd {
+	key, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return nil
 	}
 
-	thumb := maxInt(1, height*height/c.rows)
-	thumb = minInt(thumb, height)
-	travel := c.rows - height
-	position := 0
-	if travel > 0 && height > thumb {
-		position = c.offset * (height - thumb) / travel
-	}
-
-	for i := range track {
-		if i >= position && i < position+thumb {
-			track[i] = c.styles.scrollThumb.Render("█")
-		} else {
-			track[i] = c.styles.scrollRail.Render("│")
-		}
-	}
-	return track
-}
-
-// resize recomputes the visual height after an edit and keeps the mirrored
-// scroll offset aligned with the textarea's cursor-driven scrolling.
-func (c *composer) resize() {
-	width := c.ta.Width()
-	if width < 1 {
-		width = 1
-	}
-
-	previous := maxInt(1, c.ta.Height())
-	c.rows = wrappedRows(c.ta.Value(), width)
-
-	visible := minInt(c.rows, c.maxRows)
-	visible = maxInt(1, visible)
-	if visible != c.ta.Height() {
-		c.ta.SetHeight(visible)
-	}
-
-	c.syncScroll(previous, visible)
-}
-
-// syncScroll mirrors textarea.repositionView and then clamps the offset to the
-// new viewport, so the scrollbar matches what the textarea shows.
-func (c *composer) syncScroll(previous, visible int) {
-	if c.rows <= previous {
-		c.offset = 0
-	} else {
-		cursor := c.cursorRow()
-		minimum := c.offset
-		maximum := minimum + previous - 1
-		switch {
-		case cursor < minimum:
-			c.offset = cursor
-		case cursor > maximum:
-			c.offset += cursor - maximum
-		}
-	}
-
-	if limit := c.rows - visible; c.offset > limit {
-		c.offset = limit
-	}
-	if c.offset < 0 {
-		c.offset = 0
-	}
-}
-
-// cursorRow is the visual row the cursor sits on, counting soft wraps.
-func (c *composer) cursorRow() int {
-	width := c.ta.Width()
-	if width < 1 {
-		return 0
-	}
-
-	lines := strings.Split(c.ta.Value(), "\n")
-	row := c.ta.Line()
-	if row < 0 {
-		row = 0
-	}
-	if row > len(lines)-1 {
-		row = len(lines) - 1
-	}
-
-	total := 0
-	for i := 0; i < row; i++ {
-		total += len(wrapTextLine([]rune(lines[i]), width))
-	}
-	return total + c.ta.LineInfo().RowOffset
-}
-
-// wrappedRows counts the visual rows of a value at the given width.
-func wrappedRows(value string, width int) int {
-	rows := 0
-	for _, line := range strings.Split(value, "\n") {
-		rows += len(wrapTextLine([]rune(line), width))
-	}
-	return maxInt(1, rows)
-}
-
-// wrapTextLine mirrors the soft wrapping applied inside bubbles/textarea. The
-// composer needs the same row count to size itself and place the scrollbar, so
-// revisit this helper whenever the textarea dependency is upgraded.
-func wrapTextLine(runes []rune, width int) [][]rune {
-	if width < 1 {
-		return [][]rune{{}}
-	}
-
-	var (
-		lines  = [][]rune{{}}
-		word   []rune
-		row    int
-		spaces int
-	)
-
-	for _, r := range runes {
-		if unicode.IsSpace(r) {
-			spaces++
-		} else {
-			word = append(word, r)
-		}
-
-		if spaces > 0 {
-			if uniseg.StringWidth(string(lines[row]))+uniseg.StringWidth(string(word))+spaces > width {
-				row++
-				lines = append(lines, []rune{})
-				lines[row] = append(lines[row], word...)
-			} else {
-				lines[row] = append(lines[row], word...)
+	switch key.Type {
+	case tea.KeyRunes:
+		if key.Alt {
+			// Alt chords are shortcuts, never text.
+			switch string(key.Runes) {
+			case "f", "F":
+				c.moveWord(1)
+			case "b", "B":
+				c.moveWord(-1)
+			case "d", "D":
+				c.deleteWordForward()
 			}
-			lines[row] = append(lines[row], repeatSpaces(spaces)...)
-			spaces = 0
-			word = nil
-			continue
+			return nil
+		}
+		c.insert(string(key.Runes))
+
+	case tea.KeySpace:
+		if key.Alt {
+			return nil
+		}
+		c.insert(" ")
+
+	case tea.KeyEnter, tea.KeyCtrlJ:
+		c.InsertNewline()
+
+	case tea.KeyBackspace, tea.KeyCtrlH:
+		if key.Alt {
+			c.deleteWordBackward()
+		} else {
+			c.deleteBackward()
 		}
 
-		lastWidth := runewidth.RuneWidth(word[len(word)-1])
-		if uniseg.StringWidth(string(word))+lastWidth > width {
-			if len(lines[row]) > 0 {
-				row++
-				lines = append(lines, []rune{})
-			}
-			lines[row] = append(lines[row], word...)
-			word = nil
+	case tea.KeyDelete, tea.KeyCtrlD:
+		if key.Alt {
+			c.deleteWordForward()
+		} else {
+			c.deleteForward()
 		}
-	}
 
-	if uniseg.StringWidth(string(lines[row]))+uniseg.StringWidth(string(word))+spaces >= width {
-		lines = append(lines, []rune{})
-		lines[row+1] = append(lines[row+1], word...)
-		spaces++
-		lines[row+1] = append(lines[row+1], repeatSpaces(spaces)...)
-	} else {
-		lines[row] = append(lines[row], word...)
-		spaces++
-		lines[row] = append(lines[row], repeatSpaces(spaces)...)
-	}
+	case tea.KeyLeft, tea.KeyCtrlB:
+		c.moveCursor(-1)
 
-	return lines
+	case tea.KeyRight, tea.KeyCtrlF:
+		c.moveCursor(1)
+
+	case tea.KeyCtrlLeft:
+		c.moveWord(-1)
+
+	case tea.KeyCtrlRight:
+		c.moveWord(1)
+
+	case tea.KeyCtrlW:
+		c.deleteWordBackward()
+
+	case tea.KeyUp:
+		c.MoveUp()
+
+	case tea.KeyDown:
+		c.MoveDown()
+
+	case tea.KeyHome, tea.KeyCtrlA:
+		c.moveLineStart()
+
+	case tea.KeyEnd, tea.KeyCtrlE:
+		c.moveLineEnd()
+
+	case tea.KeyCtrlHome:
+		c.jumpTo(0)
+
+	case tea.KeyCtrlEnd:
+		c.jumpTo(len(c.value))
+	}
+	return nil
 }
 
-func repeatSpaces(n int) []rune {
-	return []rune(strings.Repeat(" ", n))
+// MoveUp moves the caret one visual row up, preserving the sticky column.
+// It reports false when the caret already sits on the first row, which lets
+// the caller fall back to prompt history.
+func (c *composer) MoveUp() bool {
+	row := c.cursorRow()
+	if row == 0 {
+		return false
+	}
+	col := c.goalCol
+	if col < 0 {
+		col = c.cursorColumn()
+	}
+	c.cursor = c.cursorAtColumn(row-1, col)
+	c.goalCol = col
+	c.updateViewport()
+	return true
+}
+
+// MoveDown mirrors MoveUp.
+func (c *composer) MoveDown() bool {
+	row := c.cursorRow()
+	if row >= len(c.rows)-1 {
+		return false
+	}
+	col := c.goalCol
+	if col < 0 {
+		col = c.cursorColumn()
+	}
+	c.cursor = c.cursorAtColumn(row+1, col)
+	c.goalCol = col
+	c.updateViewport()
+	return true
 }
 
 // PushHistory records a submitted prompt.
@@ -330,7 +273,7 @@ func (c *composer) HistoryPrev() bool {
 		return false
 	}
 	if c.histAt == -1 {
-		c.draft = c.ta.Value()
+		c.draft = string(c.value)
 		c.histAt = len(c.history) - 1
 	} else if c.histAt > 0 {
 		c.histAt--
@@ -354,6 +297,394 @@ func (c *composer) HistoryNext() bool {
 	c.histAt = -1
 	c.SetText(c.draft)
 	return true
+}
+
+// View renders exactly Height() rows of the buffer, each padded to the box's
+// content width and followed by a scrollbar cell when the buffer overflows.
+func (c *composer) View() string {
+	width := c.textWidth()
+
+	var out strings.Builder
+	if len(c.value) == 0 {
+		out.WriteString(c.placeholderLine(width))
+		out.WriteString(c.scrollbarCell(0))
+		return out.String()
+	}
+
+	cursorRow := c.cursorRow()
+	for i := 0; i < c.visible; i++ {
+		if i > 0 {
+			out.WriteByte('\n')
+		}
+		row := c.scroll + i
+		if row >= len(c.rows) {
+			out.WriteString(strings.Repeat(" ", width))
+		} else {
+			out.WriteString(c.renderRow(row, row == cursorRow, width))
+		}
+		out.WriteString(c.scrollbarCell(row))
+	}
+	return out.String()
+}
+
+// renderRow draws one visual row and puts the caret on its cell when this row
+// owns the cursor. The caret is a reversed cell, so it never paints a whole
+// line background.
+func (c *composer) renderRow(index int, cursorHere bool, width int) string {
+	row := c.rows[index]
+	text := c.value[row.start:row.end]
+	used := composerWidth(text)
+
+	if !cursorHere {
+		pad := width - used
+		if pad < 0 {
+			pad = 0
+		}
+		return c.styles.editorText.Render(string(text)) + strings.Repeat(" ", pad)
+	}
+
+	offset := c.cursor - row.start
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > len(text) {
+		offset = len(text)
+	}
+	// A caret past the last rune needs its own cell. When the row already
+	// fills the content width there is no room for it, so park it on the last
+	// rune instead of spilling a column into the box border.
+	if offset == len(text) && used >= width && len(text) > 0 {
+		offset = len(text) - 1
+	}
+
+	pre := string(text[:offset])
+	cell := " "
+	post := ""
+	extra := 1
+	if offset < len(text) {
+		cell = string(text[offset])
+		post = string(text[offset+1:])
+		extra = 0
+	}
+
+	pad := width - used - extra
+	if pad < 0 {
+		pad = 0
+	}
+
+	return c.styles.editorText.Render(pre) +
+		c.styles.editorCursor.Render(cell) +
+		c.styles.editorText.Render(post) +
+		strings.Repeat(" ", pad)
+}
+
+// placeholderLine shows the hint with the caret parked in front of it.
+func (c *composer) placeholderLine(width int) string {
+	text := truncateLine(composerPlaceholder, maxInt(0, width-2))
+	return c.styles.editorCursor.Render(" ") + " " + c.styles.editorPlaceholder.Render(text)
+}
+
+// scrollbarCell renders the one-column track beside the buffer. Rows outside
+// the visible area map onto the thumb proportionally.
+func (c *composer) scrollbarCell(row int) string {
+	if len(c.rows) <= c.visible {
+		return " "
+	}
+
+	thumb := maxInt(1, c.visible*c.visible/len(c.rows))
+	travel := len(c.rows) - c.visible
+	start := 0
+	if travel > 0 && c.visible > thumb {
+		start = c.scroll * (c.visible - thumb) / travel
+	}
+
+	index := row - c.scroll
+	if index >= start && index < start+thumb {
+		return c.styles.scrollThumb.Render("█")
+	}
+	return c.styles.scrollRail.Render("│")
+}
+
+// textWidth is the number of columns available for buffer text.
+func (c *composer) textWidth() int {
+	width := c.width - 1
+	if width < 1 {
+		width = 1
+	}
+	return width
+}
+
+// rewrap recomputes the visual rows after a buffer or width change and keeps
+// the caret inside the viewport.
+func (c *composer) rewrap() {
+	c.rows = wrapComposerRows(c.value, c.textWidth())
+	c.updateViewport()
+}
+
+// updateViewport sizes the visible area and scrolls it so the caret stays in
+// view.
+func (c *composer) updateViewport() {
+	c.visible = minInt(len(c.rows), c.maxRows)
+	if c.visible < 1 {
+		c.visible = 1
+	}
+
+	row := c.cursorRow()
+	if row < c.scroll {
+		c.scroll = row
+	}
+	if row >= c.scroll+c.visible {
+		c.scroll = row - c.visible + 1
+	}
+	if limit := len(c.rows) - c.visible; c.scroll > limit {
+		c.scroll = limit
+	}
+	if c.scroll < 0 {
+		c.scroll = 0
+	}
+}
+
+// cursorRow is the visual row that owns the caret. The same index can close
+// one row and open the next at a soft wrap; the later row owns it, so the
+// caret is drawn at the start of the wrapped line.
+func (c *composer) cursorRow() int {
+	row := 0
+	for i := range c.rows {
+		if c.rows[i].start > c.cursor {
+			break
+		}
+		row = i
+	}
+	return row
+}
+
+// cursorColumn is the caret's display column inside its visual row.
+func (c *composer) cursorColumn() int {
+	row := c.rows[c.cursorRow()]
+	return composerWidth(c.value[row.start:c.cursor])
+}
+
+// cursorAtColumn finds the rune index nearest to col in the given row without
+// crossing into a double-width rune.
+func (c *composer) cursorAtColumn(row, col int) int {
+	bound := c.rows[row]
+	index := bound.start
+	width := 0
+	for index < bound.end {
+		step := runeWidth(c.value[index])
+		if width+step > col {
+			break
+		}
+		width += step
+		index++
+	}
+	// A soft-wrapped row cannot own the caret past its last rune: that index
+	// belongs to the next row, which would make vertical movement stall. Step
+	// back so the caret stays on the target row.
+	if index > bound.start && row+1 < len(c.rows) && c.rows[row+1].start == index {
+		index--
+	}
+	return index
+}
+
+func (c *composer) moveCursor(delta int) {
+	c.jumpTo(c.cursor + delta)
+}
+
+func (c *composer) jumpTo(index int) {
+	if index < 0 {
+		index = 0
+	}
+	if index > len(c.value) {
+		index = len(c.value)
+	}
+	c.cursor = index
+	c.goalCol = -1
+	c.updateViewport()
+}
+
+func (c *composer) moveLineStart() {
+	start := c.cursor
+	for start > 0 && c.value[start-1] != '\n' {
+		start--
+	}
+	c.jumpTo(start)
+}
+
+func (c *composer) moveLineEnd() {
+	end := c.cursor
+	for end < len(c.value) && c.value[end] != '\n' {
+		end++
+	}
+	c.jumpTo(end)
+}
+
+func (c *composer) moveWord(delta int) {
+	if delta < 0 {
+		c.jumpTo(c.wordStart(c.cursor))
+		return
+	}
+	c.jumpTo(c.wordEnd(c.cursor))
+}
+
+func (c *composer) deleteBackward() {
+	if c.cursor == 0 {
+		return
+	}
+	c.splice(c.cursor-1, c.cursor)
+}
+
+func (c *composer) deleteForward() {
+	if c.cursor >= len(c.value) {
+		return
+	}
+	c.splice(c.cursor, c.cursor+1)
+}
+
+func (c *composer) deleteWordBackward() {
+	start := c.wordStart(c.cursor)
+	if start < c.cursor {
+		c.splice(start, c.cursor)
+	}
+}
+
+func (c *composer) deleteWordForward() {
+	end := c.wordEnd(c.cursor)
+	if end > c.cursor {
+		c.splice(c.cursor, end)
+	}
+}
+
+// wordStart is the beginning of the word before index, skipping punctuation
+// and whitespace first.
+func (c *composer) wordStart(index int) int {
+	for index > 0 && !composerWordRune(c.value[index-1]) {
+		index--
+	}
+	for index > 0 && composerWordRune(c.value[index-1]) {
+		index--
+	}
+	return index
+}
+
+// wordEnd is the end of the word after index.
+func (c *composer) wordEnd(index int) int {
+	for index < len(c.value) && !composerWordRune(c.value[index]) {
+		index++
+	}
+	for index < len(c.value) && composerWordRune(c.value[index]) {
+		index++
+	}
+	return index
+}
+
+// insert adds text at the caret, expanding tabs and normalising line endings
+// so wrapping stays exact.
+func (c *composer) insert(text string) {
+	text = normalizeComposerText(text)
+	if text == "" {
+		return
+	}
+	runes := []rune(text)
+	next := make([]rune, 0, len(c.value)+len(runes))
+	next = append(next, c.value[:c.cursor]...)
+	next = append(next, runes...)
+	next = append(next, c.value[c.cursor:]...)
+	c.value = next
+	c.cursor += len(runes)
+	c.commit()
+}
+
+// splice removes value[start:end] and parks the caret at start.
+func (c *composer) splice(start, end int) {
+	if start < 0 {
+		start = 0
+	}
+	if end > len(c.value) {
+		end = len(c.value)
+	}
+	if start >= end {
+		return
+	}
+	next := make([]rune, 0, len(c.value)-(end-start))
+	next = append(next, c.value[:start]...)
+	next = append(next, c.value[end:]...)
+	c.value = next
+	c.cursor = start
+	c.commit()
+}
+
+// commit re-lays the buffer out after an edit. The sticky column only lives
+// across consecutive vertical moves, so every edit clears it.
+func (c *composer) commit() {
+	c.goalCol = -1
+	c.rewrap()
+}
+
+// wrapComposerRows soft-wraps the buffer at the given display width. Wide
+// runes count as two columns so CJK text wraps on the terminal grid.
+func wrapComposerRows(value []rune, width int) []composerRow {
+	if width < 1 {
+		width = 1
+	}
+
+	rows := []composerRow{{}}
+	col := 0
+	for i, r := range value {
+		if r == '\n' {
+			rows[len(rows)-1].end = i
+			rows = append(rows, composerRow{start: i + 1})
+			col = 0
+			continue
+		}
+		step := runeWidth(r)
+		if col > 0 && col+step > width {
+			rows[len(rows)-1].end = i
+			rows = append(rows, composerRow{start: i})
+			col = 0
+		}
+		col += step
+	}
+	rows[len(rows)-1].end = len(value)
+	return rows
+}
+
+func normalizeComposerText(text string) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	text = strings.ReplaceAll(text, "\t", "    ")
+	// Pasted text can carry escape sequences and other control runes that
+	// would corrupt the frame. Keep newlines, drop the rest.
+	return strings.Map(func(r rune) rune {
+		if r == '\n' {
+			return r
+		}
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, text)
+}
+
+func composerWidth(value []rune) int {
+	width := 0
+	for _, r := range value {
+		width += runeWidth(r)
+	}
+	return width
+}
+
+func runeWidth(r rune) int {
+	width := runewidth.RuneWidth(r)
+	if width < 1 {
+		return 0
+	}
+	return width
+}
+
+// composerWordRune reports whether r belongs to a word for word-wise motion.
+func composerWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
 
 // completionItem is one slash command candidate.

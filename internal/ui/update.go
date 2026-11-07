@@ -583,6 +583,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if !m.enterToSend {
 			m.composer.InsertNewline()
+			m.completion.Refresh(m.composer.Value())
+			m.layout()
+			return m, nil
+		}
+		// A trailing backslash continues the prompt, the way Codex and Claude
+		// Code accept a newline in terminals without shift+enter.
+		if m.composer.TakeNewlineEscape() {
+			m.completion.Refresh(m.composer.Value())
 			m.layout()
 			return m, nil
 		}
@@ -624,23 +632,31 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.transcript.Clear()
 		return m, nil
 
-	case "pgup", "pgdown", "home", "end", "ctrl+u":
+	case "pgup", "pgdown", "ctrl+u":
 		return m, m.transcript.Update(msg)
 	}
 
-	if key == "up" && !strings.Contains(m.composer.Value(), "\n") {
+	// The arrows walk the prompt first and only fall back to history once the
+	// caret reaches the first or last visual row.
+	switch key {
+	case "up":
+		if m.composer.MoveUp() {
+			return m, nil
+		}
 		if m.composer.HistoryPrev() {
 			m.completion.Refresh(m.composer.Value())
 			m.layout()
+		}
+		return m, nil
+	case "down":
+		if m.composer.MoveDown() {
 			return m, nil
 		}
-	}
-	if key == "down" && !strings.Contains(m.composer.Value(), "\n") {
 		if m.composer.HistoryNext() {
 			m.completion.Refresh(m.composer.Value())
 			m.layout()
-			return m, nil
 		}
+		return m, nil
 	}
 
 	beforeHeight := m.composer.Height()
@@ -662,7 +678,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) acceptCompletion(item completionItem) {
 	m.composer.SetText(item.Value + " ")
-	m.composer.ta.CursorEnd()
 	m.completion.Hide()
 	m.layout()
 }
@@ -1456,6 +1471,7 @@ func (m *Model) handleExtensionUI(request *rpc.ExtensionUIRequestEvent) (tea.Mod
 		return m, tea.SetWindowTitle(request.Title)
 	case "set_editor_text":
 		m.composer.SetText(request.Text)
+		m.completion.Refresh(m.composer.Value())
 		m.layout()
 	case "select", "confirm", "input", "editor":
 		if m.overlay != nil {

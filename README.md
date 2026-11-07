@@ -152,11 +152,11 @@ selection, and `/mouse` toggles capture. In tmux, OSC52 copying needs
 | Key | Action |
 |---|---|
 | `enter` | send the prompt (queues a follow-up while a turn is running) |
-| `alt+enter`, `ctrl+j` | insert a newline |
+| `alt+enter`, `ctrl+j`, `\` then `enter` | insert a newline |
 | `ctrl+s` | steer the running turn |
 | `esc` | interrupt the running turn (queues are restored to the editor) |
 | `ctrl+c` | interrupt; press twice to quit |
-| `ctrl+d` | quit when the editor is empty |
+| `ctrl+d` | delete the character under the cursor; quit when the editor is empty |
 | `ctrl+k` | pick a model |
 | `ctrl+g` | pick a tool preset |
 | `ctrl+p` | open the command palette |
@@ -165,7 +165,12 @@ selection, and `/mouse` toggles capture. In tmux, OSC52 copying needs
 | `ctrl+o` | expand or collapse tool output and diffs |
 | `ctrl+l` | clear the scrollback |
 | `tab` | accept a slash-command completion |
-| `up` / `down` | prompt history |
+| `up` / `down` | move inside the prompt; prompt history from the first or last row |
+| `left` / `right`, `ctrl+b` / `ctrl+f` | move by one character |
+| `alt+left` / `alt+right`, `ctrl+left` / `ctrl+right` | move by one word |
+| `home` / `end`, `ctrl+a` / `ctrl+e` | start or end of the current line |
+| `ctrl+home` / `ctrl+end` | start or end of the whole prompt |
+| `ctrl+w`, `alt+backspace` | delete the previous word |
 | `pgup` / `pgdn`, `ctrl+u` | scroll the transcript |
 | drag / release | select transcript text and copy it |
 | `shift+drag` | use the terminal's native selection |
