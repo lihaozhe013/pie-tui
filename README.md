@@ -34,8 +34,9 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   `pie-tool-presets.json` and editable from Settings › Tools
 - A Models tab that merges pi's catalog with `models.json`: context-window
   limit, startup defaults, enabled-model patterns, per-model thinking levels,
-  provider credentials with `pi auth check` readiness, and custom provider and
-  model editors (including compatibility endpoints, costs, and thinking maps)
+  provider credentials with `pi auth check` readiness, per-model context
+  windows, and custom provider and model editors (including compatibility
+  endpoints, costs, and thinking maps)
 - Code mode controls in Settings › Tools: automatic or always-on (writes
   `+codemode` to `defaultTools` minimally), the `codemode.mode` choice, and the
   inline result budget
@@ -51,6 +52,12 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   refuses filtered entries instead of silently dropping their filters
 - A statistics panel from `/stats` with message counts, a token breakdown,
   cost, context usage, and the session file, refreshed while it is open
+- Plan mode shows a `plan` chip in the header and a "writes blocked" hint;
+  project MCP and package writes follow pi's `trust.json`, inherited from a
+  parent folder, and refuse to edit untrusted project resources
+- An unnamed session is titled automatically after its first settled turn; the
+  generation runs as a one-shot background `pi --print`, and failures stay out
+  of the transcript
 - Branch tools: `/fork` lists forkable user messages and restores the chosen
   prompt to the editor, `/clone` duplicates the branch, and `/tree` prints the
   session tree with the current leaf marked
