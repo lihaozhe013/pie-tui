@@ -1,9 +1,6 @@
 package session
 
-import (
-	"path/filepath"
-	"sort"
-)
+import "sort"
 
 // Project is one working directory sessions were created in.
 type Project struct {
@@ -25,7 +22,7 @@ func Projects(dir string) ([]Project, error) {
 		if entry.CWD == "" {
 			continue
 		}
-		path := filepath.Clean(entry.CWD)
+		path := canonicalDir(entry.CWD)
 		project := byPath[path]
 		if project == nil {
 			project = &Project{Path: path}

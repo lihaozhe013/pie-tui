@@ -150,3 +150,30 @@ func TestReadNameHandlesClearAndLongFiles(t *testing.T) {
 		t.Fatalf("name = %q", entry.Name)
 	}
 }
+
+func TestListForCWDResolvesSymlinks(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	real := filepath.Join(dir, "real")
+	link := filepath.Join(dir, "link")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	writeSession(t, dir, "p", "a.jsonl", `{"type":"session","id":"a1","cwd":"`+real+`"}`+"\n", "")
+	entries, err := ListForCWD(dir, link, 10)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("entries = %+v err = %v", entries, err)
+	}
+	projects, err := Projects(dir)
+	if err != nil || len(projects) != 1 {
+		t.Fatalf("projects = %+v err = %v", projects, err)
+	}
+	resolved, _ := filepath.EvalSymlinks(real)
+	if projects[0].Path != resolved {
+		t.Fatalf("project path = %q, want %q", projects[0].Path, resolved)
+	}
+}

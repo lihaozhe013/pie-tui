@@ -128,6 +128,21 @@ func List(dir string, limit int) ([]Entry, error) {
 	return entries, nil
 }
 
+// canonicalDir resolves symlinks so /tmp and /private/tmp compare equal, as
+// pi canonicalizes session headers and Pie groups by them.
+func canonicalDir(path string) string {
+	if path == "" {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return filepath.Clean(resolved)
+	}
+	if absolute, err := filepath.Abs(path); err == nil {
+		return filepath.Clean(absolute)
+	}
+	return filepath.Clean(path)
+}
+
 // ListForCWD keeps only sessions created in cwd.
 func ListForCWD(dir, cwd string, limit int) ([]Entry, error) {
 	all, err := List(dir, 0)
@@ -137,10 +152,10 @@ func ListForCWD(dir, cwd string, limit int) ([]Entry, error) {
 	if cwd == "" {
 		return all, nil
 	}
-	clean := filepath.Clean(cwd)
+	clean := canonicalDir(cwd)
 	matched := all[:0]
 	for _, entry := range all {
-		if entry.CWD == "" || filepath.Clean(entry.CWD) == clean {
+		if entry.CWD == "" || canonicalDir(entry.CWD) == clean {
 			matched = append(matched, entry)
 		}
 	}
