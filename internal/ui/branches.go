@@ -121,6 +121,7 @@ func (m *Model) applyForkResult(msg forkResultMsg) (tea.Model, tea.Cmd) {
 	m.composer.SetText(msg.text)
 	m.transcript.ScrollToBottom()
 	m.logEntries = nil
+	m.autoTitlePending = false
 	m.addNotice("forked to a new session")
 	m.setToast("forked; the message is back in the editor")
 	m.layout()
@@ -166,6 +167,7 @@ func (m *Model) applyCloneResult(msg cloneResultMsg) (tea.Model, tea.Cmd) {
 	}
 	m.loadHistory(msg.messages)
 	m.logEntries = nil
+	m.autoTitlePending = false
 	m.addNotice("cloned the current branch into a new session")
 	m.setToast("cloned to a new session")
 	return m, tea.Batch(m.refreshState(), m.refreshStats(), m.loadEntries())

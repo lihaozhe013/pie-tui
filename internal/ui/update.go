@@ -1171,6 +1171,8 @@ func (m *Model) applyResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 
 	case "new_session":
 		m.transcript.Clear()
+		m.autoTitlePending = false
+		m.state.SessionName = ""
 		m.hasSelection = false
 		m.currentMode = ""
 		m.logEntries = nil
@@ -1179,6 +1181,7 @@ func (m *Model) applyResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 
 	case "switch_session":
 		m.transcript.Clear()
+		m.autoTitlePending = false
 		return m, tea.Batch(m.refreshState(), m.refreshStats(), m.loadEntries())
 
 	case "compact":
