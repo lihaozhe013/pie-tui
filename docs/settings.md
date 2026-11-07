@@ -41,7 +41,11 @@ Four sections share `models.json`, `settings.json`, `auth.json`,
 `models-store.json`, and `pie-model-settings.json`:
 
 - General: context-window cap (blank stores an explicit no-cap), default
-  provider, model, and thinking level.
+  provider, model, and thinking level. Picking a model in the TUI writes it to
+  the startup defaults, and every thinking-level change is written to
+  `modelThinkingLevels` for the current model, so the next launch starts where
+  the last one ended. A resumed session still restores the model and level
+  recorded in its own log.
 - Enabled models: patterns and per-model switches; edits expand only the
   pattern that covers the changed model and keep `:level` pins and unmatched
   patterns intact.
@@ -58,7 +62,9 @@ larger native window is shown as the cap size, as in Pie.
 
 - Current applies `defaultTools` through the bridge. Presets are the built-in
   configured, plan, chat-only, read-only, default, and full sets plus custom
-  entries from `pie-tool-presets.json`.
+  entries from `pie-tool-presets.json`. The last applied preset is stored in
+  `pie-tui-settings.json` (`toolPreset`) and reapplied to a new session; a
+  resumed session keeps the selection recorded in its own log.
 - Code mode: automatic or always writes `+codemode` into `defaultTools` with the
   smallest edit; code-mode tools choose `on` or `only`; the inline result budget
   edits `codemode.inlineBudget`.
@@ -104,4 +110,7 @@ it.
 
 `pie-tui-settings.json` holds choices a browser does not have: `theme`,
 `enterToSend`, `goalEnabled`, `lastCwd`, `toolPreset`, `showThinking`, and
-`expandTools`. Everything shared stays in pi's files.
+`expandTools`. `toolPreset` seeds a new session with the last preset chosen in
+the terminal; everything shared stays in pi's files. Model and thinking-level
+choices are not stored here because they are shared: they go to
+`defaultProvider`/`defaultModel` and `modelThinkingLevels` in `settings.json`.

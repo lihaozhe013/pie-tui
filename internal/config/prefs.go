@@ -80,7 +80,8 @@ func (c *TUIConfig) SetLastCWD(dir string) error {
 	})
 }
 
-// ToolPreset returns the last chosen preset selection, or "configured".
+// ToolPreset returns the last chosen preset selection, or "configured". The
+// client reapplies it to a session that has not recorded one of its own.
 func (c *TUIConfig) ToolPreset() string {
 	return c.root.Get("toolPreset").StringOr("configured")
 }

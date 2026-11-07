@@ -27,7 +27,9 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
 - Tool calls rendered as compact lines, with a colourised diff for `edit`/`write`
 - Thinking blocks (collapsible), follow-up queueing, steering, and abort
 - Model picker, thinking-level cycling, session rename/resume/new, compaction,
-  HTML export, and token/context statistics
+  HTML export, and token/context statistics. The chosen model is saved to pi's
+  startup defaults and each thinking level is saved per model, so the next
+  launch starts where the last one ended
 - A command palette (`ctrl+p`) that searches and runs client or pi commands
   without clearing the composer draft
 - A settings panel (`/settings`) with the same tabs as the Pie web UI and a `/`
@@ -36,7 +38,9 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   directory
 - Tool presets (`/preset`): the built-in configured, plan, chat-only,
   read-only, default, and full sets, plus custom presets stored in
-  `pie-tool-presets.json` and editable from Settings › Tools
+  `pie-tool-presets.json` and editable from Settings › Tools. The last preset
+  is remembered in the terminal-only preferences and reused for new sessions;
+  a resumed session keeps its own recorded selection
 - A Models tab that merges pi's catalog with `models.json`: context-window
   limit, startup defaults, enabled-model patterns, per-model thinking levels,
   provider credentials with `pi auth check` readiness, per-model context

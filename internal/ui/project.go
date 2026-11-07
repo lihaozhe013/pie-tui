@@ -209,6 +209,7 @@ func (m *Model) applyProjectSwitch(msg projectSwitchedMsg) (tea.Model, tea.Cmd) 
 	m.mcpSnapshot = mcp.Snapshot{}
 	m.mcpChecked = false
 	m.presetDraft = nil
+	m.resetPresetRestore()
 	m.statuses = map[string]string{}
 	m.widget = nil
 	m.fatal = ""

@@ -146,7 +146,8 @@ styling.
   `pie:tool-selection` / `pie:work-mode` entries are Pie's files; the TUI reads
   and writes the same shapes.
 - `pie-tui-settings.json` holds terminal-only choices: theme, thinking-block
-  visibility, tool expansion, and the last working directory.
+  visibility, tool expansion, the last working directory, and the last preset
+  to seed a new session.
 
 `internal/config` owns this layer. Documents keep object member order, JSONC
 comments and trailing commas are accepted, writes are private (0600), atomic,
@@ -162,6 +163,14 @@ written as the same session entries Pie uses, so a session moved between the
 clients keeps its preset and its Plan mode. If the extension fails to load, the
 UI reports `unavailable` in Settings › General and refuses preset changes
 rather than silently diverging.
+
+`pi --mode rpc` does not persist the model or thinking level it changes, so
+`pie-tui` writes them itself: picking a model updates `defaultProvider` and
+`defaultModel`, and a thinking-level change updates the current model's
+`modelThinkingLevels` entry. pi then starts the next session on that model and
+level, while a resumed session restores the pair recorded in its own log. The
+save happens after the command succeeds, and an unreadable `settings.json` is
+left alone with the error shown instead of being replaced.
 
 `/fork` and `/clone` are RPC operations that replace the active session: after
 the command the client refetches `get_messages`, state, stats, and entries, so

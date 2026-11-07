@@ -168,17 +168,32 @@ func (m *Model) resolvePresetArg(arg string) (string, bool) {
 
 // applyPreset pins a tool set through the bridge and records the work mode.
 func (m *Model) applyPreset(selection string) tea.Cmd {
+	return m.applyPresetWithOptions(selection, false)
+}
+
+// applyPresetQuiet applies a preset without a toast, for the startup restore.
+func (m *Model) applyPresetQuiet(selection string) tea.Cmd {
+	return m.applyPresetWithOptions(selection, true)
+}
+
+func (m *Model) applyPresetWithOptions(selection string, quiet bool) tea.Cmd {
 	if m.busy {
-		m.setToast("wait for the current turn to finish")
+		if !quiet {
+			m.setToast("wait for the current turn to finish")
+		}
 		return nil
 	}
 	if !m.bridgeReady {
-		m.setToast("bridge extension unavailable; cannot change tools")
+		if !quiet {
+			m.setToast("bridge extension unavailable; cannot change tools")
+		}
 		return nil
 	}
 	tools, includeExtensions, ok := m.presetTools(selection)
 	if !ok {
-		m.setToast("preset no longer exists")
+		if !quiet {
+			m.setToast("preset no longer exists")
+		}
 		return nil
 	}
 
@@ -188,12 +203,14 @@ func (m *Model) applyPreset(selection string) tea.Cmd {
 	}
 	client := m.client
 	return func() tea.Msg {
+		msg := presetAppliedMsg{selection: selection, quiet: quiet}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		if selection == "configured" {
 			if _, err := client.DoOK(ctx, rpc.Prompt("/pie-tools configured")); err != nil {
-				return presetAppliedMsg{selection: selection, err: err}
+				msg.err = err
+				return msg
 			}
 		} else {
 			policy := "all"
@@ -205,7 +222,8 @@ func (m *Model) applyPreset(selection string) tea.Cmd {
 				command += " " + strings.Join(tools, ",")
 			}
 			if _, err := client.DoOK(ctx, rpc.Prompt(command)); err != nil {
-				return presetAppliedMsg{selection: selection, err: err}
+				msg.err = err
+				return msg
 			}
 		}
 
@@ -218,12 +236,47 @@ func (m *Model) applyPreset(selection string) tea.Cmd {
 					modeArg = targetMode
 				}
 				if _, err := client.DoOK(ctx, rpc.Prompt("/pie-mode "+modeArg)); err != nil {
-					return presetAppliedMsg{selection: selection, err: err}
+					msg.err = err
+					return msg
 				}
 			}
 		}
-		return presetAppliedMsg{selection: selection}
+		return msg
 	}
+}
+
+// restoreSavedPreset reapplies the last preset chosen in the terminal when the
+// session records none of its own. Presets live in the session log, so a fresh
+// launch, /new, or a project switch keeps the tool set the person used last,
+// while a resumed conversation keeps the selection it saved.
+func (m *Model) restoreSavedPreset() tea.Cmd {
+	if m.presetRestored || !m.entriesLoaded || m.prefs == nil {
+		return nil
+	}
+	if m.state.MessageCount > 0 || m.hasSelection || m.currentMode != "" || m.busy {
+		m.presetRestored = true
+		return nil
+	}
+	if !m.bridgeReady {
+		// commandsMsg retries once pi advertises the bridge.
+		return nil
+	}
+	selection := m.prefs.ToolPreset()
+	m.presetRestored = true
+	if selection == "" || selection == "configured" {
+		return nil
+	}
+	if _, _, ok := m.presetTools(selection); !ok {
+		// The custom preset was deleted since it was saved.
+		return nil
+	}
+	return m.applyPresetQuiet(selection)
+}
+
+// resetPresetRestore lets the saved preset apply to the next loaded session.
+func (m *Model) resetPresetRestore() {
+	m.presetRestored = false
+	m.entriesLoaded = false
 }
 
 func fetchEntries(ctx context.Context, client Client) ([]session.LogEntry, error) {
@@ -690,6 +743,10 @@ func (m *Model) deletePresetDraft(draft *presetDraft) error {
 	}
 	if err := m.presetFile.Save(out); err != nil {
 		return err
+	}
+	if m.prefs != nil && m.prefs.ToolPreset() == config.CustomPresetPrefix+draft.Preset.ID {
+		// Do not leave a saved selection pointing at a preset that is gone.
+		_ = m.prefs.SetToolPreset("configured")
 	}
 	m.reloadConfig()
 	return nil

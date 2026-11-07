@@ -826,7 +826,12 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 		return m.openModelPicker(), true
 	case "/think":
 		if argument != "" {
-			return m.setThinking(argument), true
+			level := strings.ToLower(argument)
+			if !config.IsThinkingLevel(level) {
+				m.setToast("unknown thinking level: " + argument)
+				return nil, true
+			}
+			return m.setThinking(level), true
 		}
 		return m.cycleThinking(), true
 	case "/new":
@@ -983,7 +988,7 @@ func (m *Model) setThinking(level string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		response, err := client.DoOK(ctx, rpc.SetThinkingLevel(level))
-		return responseMsg{action: "thinking", resp: response, err: err}
+		return responseMsg{action: "thinking", level: level, resp: response, err: err}
 	}
 }
 
@@ -1039,6 +1044,43 @@ func (m *Model) savedThinkingLevel(provider, id string) string {
 		return ""
 	}
 	return levels[provider+"/"+id]
+}
+
+// rememberModelSelection writes the chosen model to pi's startup defaults, as
+// pi's own model picker does, so the next launch starts on it. A resumed
+// session still restores the model recorded in its own log.
+func (m *Model) rememberModelSelection(model rpc.ModelInfo) {
+	if m.settings == nil || model.Provider == "" || model.ID == "" {
+		return
+	}
+	provider, _ := m.settings.DefaultProvider()
+	current, _ := m.settings.DefaultModel()
+	if provider == model.Provider && current == model.ID {
+		return
+	}
+	err := m.settings.Update(func(root *config.Value) error {
+		root.SetString("defaultProvider", model.Provider)
+		root.SetString("defaultModel", model.ID)
+		return nil
+	})
+	if err != nil {
+		m.addError("remember model: " + err.Error())
+	}
+}
+
+// rememberThinkingLevel writes the level as the current model's startup
+// default. pi applies modelThinkingLevels to a new session on that model and
+// when it switches back to it.
+func (m *Model) rememberThinkingLevel(level string) {
+	if m.settings == nil || m.state.Model == nil || !m.state.Model.Reasoning || !config.IsThinkingLevel(level) {
+		return
+	}
+	if m.savedThinkingLevel(m.state.Model.Provider, m.state.Model.ID) == level {
+		return
+	}
+	if err := m.settings.SetModelThinkingLevel(m.state.Model.Label(), level); err != nil {
+		m.addError("remember thinking level: " + err.Error())
+	}
 }
 
 func (m *Model) setModelByLabel(label string) tea.Cmd {
@@ -1291,25 +1333,37 @@ func (m *Model) applyResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 	case "model":
 		if model, err := rpc.DecodeTyped[rpc.ModelInfo](response); err == nil && model.ID != "" {
 			m.state.Model = &model
+			m.rememberModelSelection(model)
 			m.setToast("model: " + model.Label())
 		}
 
 	case "thinking":
-		if level, err := rpc.DecodeTyped[struct {
+		// cycle_thinking_level reports the effective level; set_thinking_level
+		// returns no payload, so the requested level from the command is used.
+		level := msg.level
+		if decoded, err := rpc.DecodeTyped[struct {
 			Level string `json:"level"`
-		}](response); err == nil && level.Level != "" {
-			m.state.ThinkingLevel = level.Level
-			m.setToast("thinking: " + level.Level)
-		} else {
-			m.setToast("this model does not support thinking levels")
+		}](response); err == nil && decoded.Level != "" {
+			level = decoded.Level
 		}
+		if level == "" || (m.state.Model != nil && !m.state.Model.Reasoning) {
+			m.setToast("this model does not support thinking levels")
+			return m, nil
+		}
+		m.state.ThinkingLevel = level
+		m.rememberThinkingLevel(level)
+		m.setToast("thinking: " + level)
 
 	case "new_session":
+		m.resetPresetRestore()
 		m.sessionEpoch.Add(1)
 		m.transcript.Clear()
 		m.autoTitlePending = false
 		m.invalidateTitle()
 		m.state.SessionName = ""
+		// The entries and the refreshed state race; a new session has no
+		// messages, so the saved preset must not read the old count.
+		m.state.MessageCount = 0
 		m.hasSelection = false
 		m.currentMode = ""
 		m.logEntries = nil
@@ -1317,6 +1371,7 @@ func (m *Model) applyResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.refreshState(), m.refreshStats(), m.loadEntries())
 
 	case "switch_session":
+		m.resetPresetRestore()
 		m.sessionEpoch.Add(1)
 		m.transcript.Clear()
 		m.autoTitlePending = false

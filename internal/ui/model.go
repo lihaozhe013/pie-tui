@@ -98,6 +98,7 @@ type (
 
 	responseMsg struct {
 		action string
+		level  string
 		resp   *rpc.Response
 		err    error
 	}
@@ -143,6 +144,7 @@ type (
 
 	presetAppliedMsg struct {
 		selection string
+		quiet     bool
 		err       error
 	}
 
@@ -236,19 +238,23 @@ type Model struct {
 	// sessionEpoch invalidates in-flight title requests after a session switch.
 	sessionEpoch atomic.Uint64
 
-	presetFile    *config.PresetFile
-	presetDraft   *presetDraft
-	toolSnapshot  *toolSnapshot
-	modelSettings *config.ModelSettings
-	modelsFile    *config.ModelsFile
-	catalog       *modelcatalog.Catalog
-	catalogErr    error
-	enabledModels map[string]bool
-	modelPins     map[string]string
-	logEntries    []session.LogEntry
-	selection     session.ToolSelection
-	hasSelection  bool
-	currentMode   string
+	presetFile  *config.PresetFile
+	presetDraft *presetDraft
+	// presetRestored reports whether the saved preset was applied to this
+	// session; entriesLoaded gates that attempt until the log has been read.
+	presetRestored bool
+	entriesLoaded  bool
+	toolSnapshot   *toolSnapshot
+	modelSettings  *config.ModelSettings
+	modelsFile     *config.ModelsFile
+	catalog        *modelcatalog.Catalog
+	catalogErr     error
+	enabledModels  map[string]bool
+	modelPins      map[string]string
+	logEntries     []session.LogEntry
+	selection      session.ToolSelection
+	hasSelection   bool
+	currentMode    string
 
 	goalAvailable bool
 	goalEnabled   bool
@@ -558,7 +564,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.addError("preset: " + msg.err.Error())
 			return m, nil
 		}
-		m.setToast("preset: " + msg.selection)
+		if m.prefs != nil && m.prefs.ToolPreset() != msg.selection {
+			_ = m.prefs.SetToolPreset(msg.selection)
+		}
+		if !msg.quiet {
+			m.setToast("preset: " + msg.selection)
+		}
 		return m, tea.Batch(m.loadEntries(), m.loadToolSnapshot())
 
 	case reloadMsg:
@@ -581,6 +592,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.bridgeReady = m.hasPiCommand("pie-tools")
 		m.goalAvailable = m.hasPiCommand("goal")
 		m.completion.SetItems(m.commandItems())
+		if cmd := m.restoreSavedPreset(); cmd != nil {
+			return m, cmd
+		}
 		return m, nil
 
 	case providerCheckMsg:
@@ -629,6 +643,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A history load only happens after switch_session succeeded, so the
 		// old session's title request is no longer valid even if loading the
 		// messages failed.
+		m.resetPresetRestore()
 		m.sessionEpoch.Add(1)
 		m.autoTitlePending = false
 		m.invalidateTitle()
@@ -657,11 +672,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.logEntries = msg.entries
+		m.entriesLoaded = true
 		m.selection, m.hasSelection = session.ReadToolSelection(m.logEntries)
 		m.currentMode = session.ReadWorkMode(m.logEntries)
 		m.goal, m.hasGoal = session.ReadGoal(m.logEntries)
 		if m.overlay != nil && m.overlay.action == "goal" {
 			m.openGoalPanel()
+		}
+		if cmd := m.restoreSavedPreset(); cmd != nil {
+			return m, cmd
 		}
 		return m, nil
 
