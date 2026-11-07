@@ -141,3 +141,28 @@ func TestGoalPanelStopsARunningTurn(t *testing.T) {
 		t.Fatal("stop did not abort")
 	}
 }
+
+func TestGoalActionsWaitForTheTurn(t *testing.T) {
+	m := New(newFakeClient(), Options{})
+	m.goalEnabled = true
+	m.goalAvailable = true
+	m.hasGoal = true
+	m.goal = session.Goal{Status: "paused", Objective: "parity"}
+	m.busy = true
+	panel := m.goalPanel()
+	var clear settingsRow
+	for _, row := range panel.tabs[0].Rows {
+		if row.ID == "goal-clear" {
+			clear = row
+		}
+	}
+	if clear.Run == nil {
+		t.Fatal("clear action missing")
+	}
+	if cmd := clear.Run(m, panel); cmd != nil {
+		t.Fatal("goal command ran during a turn")
+	}
+	if panel.err == "" {
+		t.Fatal("no explanation shown")
+	}
+}

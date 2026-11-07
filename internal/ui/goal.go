@@ -120,6 +120,10 @@ func (m *Model) goalPanel() *settingsState {
 
 	send := func(command string) func(m *Model, s *settingsState) tea.Cmd {
 		return func(m *Model, s *settingsState) tea.Cmd {
+			if m.busy {
+				s.err = "wait for the current turn to finish, or use Stop run"
+				return nil
+			}
 			m.closeOverlay()
 			return m.sendPrompt(command)
 		}
@@ -134,6 +138,10 @@ func (m *Model) goalPanel() *settingsState {
 		Label: startLabel,
 		Kind:  settingsAction,
 		Run: func(m *Model, s *settingsState) tea.Cmd {
+			if m.busy {
+				s.err = "wait for the current turn to finish, or use Stop run"
+				return nil
+			}
 			value := strings.TrimSpace(objective)
 			if value == "" {
 				s.err = "an objective is required"
