@@ -244,6 +244,19 @@ func (c *Client) Do(ctx context.Context, command Command) (*Response, error) {
 	}
 }
 
+// Send writes a command without waiting for a response.
+//
+// Use it for records that never produce one, such as extension_ui_response.
+func (c *Client) Send(command Command) error {
+	if command == nil {
+		return errors.New("rpc: nil command")
+	}
+	if kind, _ := command["type"].(string); kind == "" {
+		return errors.New("rpc: command without type")
+	}
+	return c.write(command)
+}
+
 // DoOK is Do with an error for unsuccessful responses.
 func (c *Client) DoOK(ctx context.Context, command Command) (*Response, error) {
 	response, err := c.Do(ctx, command)

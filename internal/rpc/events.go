@@ -315,14 +315,18 @@ func (e *UnknownEvent) Kind() string { return e.Type }
 // Message is a protocol message. Content blocks are decoded leniently: a plain
 // string is treated as a single text block.
 type Message struct {
-	Role         string  `json:"role"`
-	Content      Content `json:"content"`
-	Timestamp    int64   `json:"timestamp"`
-	StopReason   string  `json:"stopReason,omitempty"`
-	ErrorMessage string  `json:"errorMessage,omitempty"`
-	Usage        *Usage  `json:"usage,omitempty"`
-	Provider     string  `json:"provider,omitempty"`
-	Model        string  `json:"model,omitempty"`
+	Role         string          `json:"role"`
+	Content      Content         `json:"content"`
+	Timestamp    int64           `json:"timestamp"`
+	StopReason   string          `json:"stopReason,omitempty"`
+	ErrorMessage string          `json:"errorMessage,omitempty"`
+	Usage        *Usage          `json:"usage,omitempty"`
+	Provider     string          `json:"provider,omitempty"`
+	Model        string          `json:"model,omitempty"`
+	ToolCallID   string          `json:"toolCallId,omitempty"`
+	ToolName     string          `json:"toolName,omitempty"`
+	Details      json.RawMessage `json:"details,omitempty"`
+	IsError      bool            `json:"isError,omitempty"`
 }
 
 // Text concatenates every text block of the message.
