@@ -114,3 +114,15 @@ func overlayAction(overlay *overlay) string {
 	}
 	return overlay.action
 }
+
+func TestPlanModeShowsInHeaderAndHint(t *testing.T) {
+	m := New(newFakeClient(), Options{CWD: "/work/dir"})
+	m.width, m.height = 100, 30
+	m.currentMode = "plan"
+	if header := m.renderHeader(); !strings.Contains(header, "plan") {
+		t.Fatalf("header = %q", header)
+	}
+	if hint := m.renderEditor(); !strings.Contains(hint, "writes blocked") {
+		t.Fatalf("hint = %q", hint)
+	}
+}

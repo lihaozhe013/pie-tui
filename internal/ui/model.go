@@ -883,6 +883,9 @@ func (m *Model) renderHeader() string {
 	if id := m.currentPresetID(); id != "configured" {
 		segments = append(segments, m.styles.muted.Render("tools:"+m.presetLabel(id)))
 	}
+	if m.currentMode == "plan" {
+		segments = append(segments, m.styles.accent.Render("plan"))
+	}
 	if goal := m.goalStatusSegment(); goal != "" {
 		segments = append(segments, m.styles.muted.Render(goal))
 	}
@@ -972,6 +975,9 @@ func (m *Model) renderEditor() string {
 	}
 	if m.disconnected {
 		hint = "pi exited · ctrl+c to quit"
+	}
+	if m.currentMode == "plan" && !m.disconnected {
+		hint = "plan mode · writes blocked · " + hint
 	}
 
 	style := m.styles.editorBox.Copy().Width(maxInt(20, m.width-2))
