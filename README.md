@@ -17,6 +17,8 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
 - Header line with the current directory (`~`-collapsed), model, thinking
   level, and session name
 - Streaming assistant output with incremental Markdown rendering
+- A live blue activity bar above the composer names the current wait, thinking
+  block, tool call, retry, or compaction, with a pulsing marker and elapsed time
 - Tool calls rendered as compact lines, with a colourised diff for `edit`/`write`
 - Thinking blocks (collapsible), follow-up queueing, steering, and abort
 - Model picker, thinking-level cycling, session rename/resume/new, compaction,

@@ -3,6 +3,8 @@ package ui
 import (
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestCompletionFiltersByPrefix(t *testing.T) {
@@ -125,6 +127,81 @@ func TestComposerHeightFollowsNewlines(t *testing.T) {
 	c.Reset()
 	if c.Height() != 1 {
 		t.Fatalf("height after reset = %d", c.Height())
+	}
+}
+
+func TestComposerHeightCountsSoftWrappedRows(t *testing.T) {
+	t.Parallel()
+
+	c := newComposer(newStyles(defaultTheme()))
+	c.SetWidth(12) // the textarea gets 11 columns, one goes to the scrollbar
+
+	c.SetText(strings.Repeat("x", 10))
+	if c.Height() != 1 {
+		t.Fatalf("height = %d, want 1", c.Height())
+	}
+	// A line that exactly fills the width reserves a row for the cursor, which
+	// matches how the textarea wraps its own content.
+	c.SetText(strings.Repeat("x", 12))
+	if c.Height() != 2 {
+		t.Fatalf("height = %d, want 2", c.Height())
+	}
+}
+
+func TestComposerCapsHeightAndShowsScrollbar(t *testing.T) {
+	t.Parallel()
+
+	c := newComposer(newStyles(defaultTheme()))
+	c.SetWidth(40)
+
+	for i := 0; i < 12; i++ {
+		if i > 0 {
+			c.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
+		}
+		c.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	}
+
+	if got := c.ta.LineCount(); got != 12 {
+		t.Fatalf("line count = %d, want 12", got)
+	}
+	if c.Height() != composerMaxRows {
+		t.Fatalf("height = %d, want %d", c.Height(), composerMaxRows)
+	}
+
+	view := c.View()
+	lines := strings.Split(view, "\n")
+	if len(lines) != composerMaxRows {
+		t.Fatalf("rendered rows = %d, want %d", len(lines), composerMaxRows)
+	}
+	if !strings.Contains(view, "█") {
+		t.Fatalf("scrollbar thumb missing from view: %q", view)
+	}
+	for _, line := range lines {
+		if got := lipglossWidth(line); got != c.width {
+			t.Fatalf("row width = %d, want %d: %q", got, c.width, line)
+		}
+	}
+}
+
+func TestComposerMaxRowsRestoresAfterShortTerminal(t *testing.T) {
+	t.Parallel()
+
+	c := newComposer(newStyles(defaultTheme()))
+	c.SetWidth(40)
+	c.SetText("1\n2\n3\n4\n5")
+
+	c.SetMaxRows(3)
+	if c.Height() != 3 {
+		t.Fatalf("height = %d, want 3", c.Height())
+	}
+
+	c.SetMaxRows(20)
+	if c.Height() != 5 {
+		t.Fatalf("height = %d, want 5", c.Height())
+	}
+	c.SetMaxRows(0)
+	if c.Height() != 1 {
+		t.Fatalf("height = %d, want 1", c.Height())
 	}
 }
 

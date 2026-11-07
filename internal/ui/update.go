@@ -19,11 +19,15 @@ func (m *Model) handleEvent(event rpc.Event) (tea.Model, tea.Cmd) {
 	case *rpc.AgentStartEvent:
 		m.busy = true
 		m.stream = streamState{}
+		m.activity.begin()
+		m.layout()
 		// Keep the event pump alive: only one cmd may read the channel at a time.
 		return m, tea.Batch(m.waitEvent(), m.scheduleTick())
 
 	case *rpc.AgentSettledEvent:
 		m.busy = false
+		m.activity.reset()
+		m.layout()
 		m.finishStream()
 		m.transcript.MarkDirty()
 		return m, tea.Batch(m.waitEvent(), m.refreshStats())
@@ -68,7 +72,12 @@ func (m *Model) handleEvent(event rpc.Event) (tea.Model, tea.Cmd) {
 
 	case *rpc.CompactionStartEvent:
 		m.addNotice(fmt.Sprintf("compacting context (%s)…", ev.Reason))
-		return m, m.waitEvent()
+		if !m.activity.compacting {
+			m.activity.compacting = true
+			m.activity.ensureStarted()
+			m.layout()
+		}
+		return m, tea.Batch(m.waitEvent(), m.scheduleTick())
 
 	case *rpc.CompactionEndEvent:
 		switch {
@@ -80,21 +89,36 @@ func (m *Model) handleEvent(event rpc.Event) (tea.Model, tea.Cmd) {
 			m.addNotice(fmt.Sprintf("context compacted: %s → ~%s tokens",
 				formatTokens(ev.Result.TokensBefore), formatTokens(ev.Result.EstimatedTokensAfter)))
 		}
+		m.activity.compacting = false
+		if !m.busy {
+			m.activity.reset()
+		}
+		m.layout()
 		return m, m.waitEvent()
 
 	case *rpc.AutoRetryStartEvent:
 		m.addNotice(fmt.Sprintf("retry %d/%d in %dms: %s",
 			ev.Attempt, ev.MaxAttempts, ev.DelayMs, ev.ErrorMessage))
-		return m, m.waitEvent()
+		m.activity.retry = fmt.Sprintf("Retrying %d/%d…", ev.Attempt, ev.MaxAttempts)
+		return m, tea.Batch(m.waitEvent(), m.scheduleTick())
 
 	case *rpc.AutoRetryEndEvent:
 		if !ev.Success && ev.FinalError != "" {
 			m.addError("retries exhausted: " + ev.FinalError)
 		}
+		m.activity.retry = ""
+		m.layout()
 		return m, m.waitEvent()
 
 	case *rpc.SummarizationRetryScheduledEvent:
 		m.addNotice(fmt.Sprintf("summarization retry %d/%d in %dms", ev.Attempt, ev.MaxAttempts, ev.DelayMs))
+		m.activity.retry = fmt.Sprintf("Retrying summary %d/%d…", ev.Attempt, ev.MaxAttempts)
+		m.layout()
+		return m, tea.Batch(m.waitEvent(), m.scheduleTick())
+
+	case *rpc.SummarizationRetryFinishedEvent:
+		m.activity.retry = ""
+		m.layout()
 		return m, m.waitEvent()
 
 	case *rpc.BashExecutionUpdateEvent:
@@ -125,6 +149,9 @@ func (m *Model) applyStreamUpdate(update *rpc.MessageUpdateEvent) {
 
 	switch {
 	case strings.HasPrefix(kind, "thinking_"):
+		m.activity.phase = activityThinking
+		m.activity.draftTool = ""
+		m.activity.ensureStarted()
 		if m.stream.thinking == nil {
 			m.stream.thinking = newBlock(blockThinking, "")
 			m.stream.thinking.streaming = true
@@ -135,6 +162,9 @@ func (m *Model) applyStreamUpdate(update *rpc.MessageUpdateEvent) {
 		m.stream.dirty = true
 
 	case strings.HasPrefix(kind, "text_"):
+		m.activity.phase = activityStreaming
+		m.activity.draftTool = ""
+		m.activity.ensureStarted()
 		if m.stream.assistant == nil {
 			m.stream.assistant = newBlock(blockAssistant, "")
 			m.stream.assistant.streaming = true
@@ -144,7 +174,16 @@ func (m *Model) applyStreamUpdate(update *rpc.MessageUpdateEvent) {
 		m.stream.dirty = true
 
 	case strings.HasPrefix(kind, "toolcall_"):
-		// Tool blocks are created by tool_execution_start.
+		// Tool blocks are created by tool_execution_start, but naming the call
+		// being written keeps the bar alive while its arguments stream.
+		m.activity.phase = activityPreparingTool
+		m.activity.ensureStarted()
+		if update.Assistant.ToolName != "" {
+			m.activity.draftTool = update.Assistant.ToolName
+		}
+		if call := update.Assistant.ToolCall; call != nil && call.Name != "" {
+			m.activity.draftTool = call.Name
+		}
 	}
 
 	if update.Usage != nil && update.Usage.TotalTokens > 0 {
@@ -215,6 +254,7 @@ func (m *Model) removeBlock(target *block) {
 // raw argument dump.
 func (m *Model) startTool(event *rpc.ToolExecutionStartEvent) {
 	args := rpc.DecodeArgs(event.Args)
+	m.activity.addTool(event.ToolCallID, event.ToolName, toolSummary(event.ToolName, args))
 
 	if path, pairs, ok := toolDiff(event.ToolName, args); ok {
 		body, truncated := diffBody(pairs, 200)
@@ -257,6 +297,7 @@ func (m *Model) updateTool(event *rpc.ToolExecutionUpdateEvent) {
 }
 
 func (m *Model) endTool(event *rpc.ToolExecutionEndEvent) {
+	m.activity.removeTool(event.ToolCallID)
 	block := m.transcript.Tool(event.ToolCallID)
 	if block == nil {
 		return
@@ -823,6 +864,8 @@ func (m *Model) applyResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 		m.addError(msg.err.Error())
 		if msg.action == "prompt" {
 			m.busy = false
+			m.activity.reset()
+			m.layout()
 		}
 		return m, nil
 	}

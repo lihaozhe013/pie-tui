@@ -139,6 +139,7 @@ type Model struct {
 	busy         bool
 	frame        int
 	stream       streamState
+	activity     activityState
 	spinning     bool
 	ticking      bool
 	fatal        string
@@ -244,6 +245,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case closedMsg:
 		m.disconnected = true
 		m.busy = false
+		m.activity.reset()
+		m.layout()
 		tail := strings.Join(m.client.StderrTail(), "\n")
 		detail := "pi exited"
 		if err := m.client.Err(); err != nil {
@@ -272,7 +275,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.stream.dirty = false
 			m.transcript.MarkDirty()
 		}
-		if m.busy {
+		if m.activityActive() {
 			return m, m.scheduleTick()
 		}
 		return m, nil
@@ -353,6 +356,8 @@ func (m *Model) applyHandshake(msg handshakeMsg) (tea.Model, tea.Cmd) {
 	if m.state.IsStreaming {
 		// Attach to a run that was already in flight when we started.
 		m.busy = true
+		m.activity.begin()
+		m.layout()
 		m.transcript.Add(newBlock(blockNotice, "attached to a running turn"))
 		return m, m.scheduleTick()
 	}
@@ -391,8 +396,9 @@ func (m *Model) commandItems() []completionItem {
 
 // layout recomputes pane sizes from the terminal size and editor height.
 //
-// The frame is exactly height lines: 1 header + body + 1 status + editor box +
-// hint. Any mismatch would scroll the alternate screen and hide the header.
+// The frame is exactly height lines: 1 header + body + 1 status + an optional
+// activity row + editor box + hint. Any mismatch would scroll the alternate
+// screen and hide the header.
 func (m *Model) layout() {
 	if m.width == 0 || m.height == 0 {
 		return
@@ -401,16 +407,14 @@ func (m *Model) layout() {
 
 	// On a very short terminal, shrink the editor instead of letting the frame
 	// clip its bottom border.
-	if limit := m.height - 5; limit >= 1 && m.composer.Height() > limit {
-		m.composer.ta.SetHeight(limit)
-	}
+	m.composer.SetMaxRows(m.height - 6 - m.activityRows())
 
 	editor := m.composer.Height() + 3
 	completion := 0
 	if m.completion.visible && m.overlay == nil {
 		completion = minInt(len(m.completion.filtered), 6) + 2
 	}
-	body := m.height - 2 - editor - completion
+	body := m.height - 2 - m.activityRows() - editor - completion
 	if body < 1 {
 		body = 1
 	}
@@ -441,6 +445,9 @@ func (m *Model) View() string {
 
 	if len(lines) < m.height {
 		lines = append(lines, m.renderStatus())
+	}
+	if m.activityRows() > 0 && len(lines) < m.height {
+		lines = append(lines, m.renderActivity())
 	}
 	if m.completion.visible && m.overlay == nil && len(lines) < m.height {
 		lines = append(lines, strings.Split(m.renderCompletion(), "\n")...)
@@ -527,10 +534,6 @@ func (m *Model) renderHeader() string {
 	if m.state.SessionName != "" {
 		segments = append(segments, m.styles.muted.Render(m.state.SessionName))
 	}
-	if m.busy {
-		spinner := []string{"·", "•", "●", "•"}
-		segments = append(segments, m.styles.accent.Render(spinner[m.frame%len(spinner)]))
-	}
 
 	return truncateLine(strings.Join(segments, m.styles.muted.Render(" · ")), m.width)
 }
@@ -542,10 +545,6 @@ func (m *Model) renderStatus() string {
 		left = append(left, m.styles.errorText.Render(m.fatal))
 	} else if m.disconnected {
 		left = append(left, m.styles.errorText.Render("pi disconnected · ctrl+c to exit"))
-	}
-
-	if m.busy && !m.disconnected {
-		left = append(left, m.styles.muted.Render("working… esc to interrupt · ctrl+s to steer"))
 	}
 
 	if queued := len(m.queue.Steering) + len(m.queue.FollowUp); queued > 0 {
@@ -621,7 +620,7 @@ func (m *Model) renderEditor() string {
 	}
 
 	style := m.styles.editorBox.Copy().Width(maxInt(20, m.width-2))
-	content := m.composer.ta.View()
+	content := m.composer.View()
 	box := style.Render(content)
 	return box + "\n" + m.styles.editorHint.Render(truncateLine(hint, m.width))
 }

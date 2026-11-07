@@ -79,6 +79,8 @@ the resume picker.
   command helpers that call pi.
 - `commands.go` — the client-side command table: canonical names, aliases, and
   the alias-to-command index shared by dispatch and completion.
+- `activity.go` — the live run status above the composer: phase, running tools,
+  retry and compaction labels, elapsed time, and the pulsing marker.
 - `viewport.go` — transcript blocks, scrolling, and incremental markdown.
 - `input.go` — multi-line composer, prompt history, and slash completion.
 - `overlay.go` — pickers and extension dialogs.

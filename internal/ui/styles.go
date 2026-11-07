@@ -9,42 +9,46 @@ import (
 // theme is the dark, low-noise palette of the client. Every color is adaptive so
 // the UI stays readable on light terminals without a separate theme file.
 type theme struct {
-	Base       lipgloss.AdaptiveColor
-	Muted      lipgloss.AdaptiveColor
-	Faint      lipgloss.AdaptiveColor
-	Accent     lipgloss.AdaptiveColor
-	AccentSoft lipgloss.AdaptiveColor
-	User       lipgloss.AdaptiveColor
-	Assistant  lipgloss.AdaptiveColor
-	Thinking   lipgloss.AdaptiveColor
-	Tool       lipgloss.AdaptiveColor
-	Success    lipgloss.AdaptiveColor
-	Warn       lipgloss.AdaptiveColor
-	Danger     lipgloss.AdaptiveColor
-	DiffAdd    lipgloss.AdaptiveColor
-	DiffDel    lipgloss.AdaptiveColor
-	Border     lipgloss.AdaptiveColor
-	Panel      lipgloss.AdaptiveColor
+	Base        lipgloss.AdaptiveColor
+	Muted       lipgloss.AdaptiveColor
+	Faint       lipgloss.AdaptiveColor
+	Accent      lipgloss.AdaptiveColor
+	AccentSoft  lipgloss.AdaptiveColor
+	User        lipgloss.AdaptiveColor
+	Assistant   lipgloss.AdaptiveColor
+	Thinking    lipgloss.AdaptiveColor
+	Tool        lipgloss.AdaptiveColor
+	Success     lipgloss.AdaptiveColor
+	Warn        lipgloss.AdaptiveColor
+	Danger      lipgloss.AdaptiveColor
+	DiffAdd     lipgloss.AdaptiveColor
+	DiffDel     lipgloss.AdaptiveColor
+	Border      lipgloss.AdaptiveColor
+	Panel       lipgloss.AdaptiveColor
+	Activity    lipgloss.AdaptiveColor
+	ActivityDim lipgloss.AdaptiveColor
 }
 
 func defaultTheme() theme {
 	return theme{
-		Base:       lipgloss.AdaptiveColor{Light: "#2B2B33", Dark: "#D5D6DB"},
-		Muted:      lipgloss.AdaptiveColor{Light: "#5F6068", Dark: "#8A8B94"},
-		Faint:      lipgloss.AdaptiveColor{Light: "#84858D", Dark: "#5C5D66"},
-		Accent:     lipgloss.AdaptiveColor{Light: "#6D4FD1", Dark: "#A78BFA"},
-		AccentSoft: lipgloss.AdaptiveColor{Light: "#7E63C9", Dark: "#7C6FD6"},
-		User:       lipgloss.AdaptiveColor{Light: "#1667A8", Dark: "#9AD1FF"},
-		Assistant:  lipgloss.AdaptiveColor{Light: "#2B2B33", Dark: "#D5D6DB"},
-		Thinking:   lipgloss.AdaptiveColor{Light: "#6B6C74", Dark: "#8A8B94"},
-		Tool:       lipgloss.AdaptiveColor{Light: "#6D4FD1", Dark: "#C6A9F0"},
-		Success:    lipgloss.AdaptiveColor{Light: "#1F7A45", Dark: "#8BD5A4"},
-		Warn:       lipgloss.AdaptiveColor{Light: "#8A5B00", Dark: "#E4C07A"},
-		Danger:     lipgloss.AdaptiveColor{Light: "#B02A2A", Dark: "#F08A8A"},
-		DiffAdd:    lipgloss.AdaptiveColor{Light: "#1F7A45", Dark: "#8BD5A4"},
-		DiffDel:    lipgloss.AdaptiveColor{Light: "#B02A2A", Dark: "#F08A8A"},
-		Border:     lipgloss.AdaptiveColor{Light: "#C6C7CE", Dark: "#33343D"},
-		Panel:      lipgloss.AdaptiveColor{Light: "#F2F2F5", Dark: "#1C1D24"},
+		Base:        lipgloss.AdaptiveColor{Light: "#2B2B33", Dark: "#D5D6DB"},
+		Muted:       lipgloss.AdaptiveColor{Light: "#5F6068", Dark: "#8A8B94"},
+		Faint:       lipgloss.AdaptiveColor{Light: "#84858D", Dark: "#5C5D66"},
+		Accent:      lipgloss.AdaptiveColor{Light: "#6D4FD1", Dark: "#A78BFA"},
+		AccentSoft:  lipgloss.AdaptiveColor{Light: "#7E63C9", Dark: "#7C6FD6"},
+		User:        lipgloss.AdaptiveColor{Light: "#1667A8", Dark: "#9AD1FF"},
+		Assistant:   lipgloss.AdaptiveColor{Light: "#2B2B33", Dark: "#D5D6DB"},
+		Thinking:    lipgloss.AdaptiveColor{Light: "#6B6C74", Dark: "#8A8B94"},
+		Tool:        lipgloss.AdaptiveColor{Light: "#6D4FD1", Dark: "#C6A9F0"},
+		Success:     lipgloss.AdaptiveColor{Light: "#1F7A45", Dark: "#8BD5A4"},
+		Warn:        lipgloss.AdaptiveColor{Light: "#8A5B00", Dark: "#E4C07A"},
+		Danger:      lipgloss.AdaptiveColor{Light: "#B02A2A", Dark: "#F08A8A"},
+		DiffAdd:     lipgloss.AdaptiveColor{Light: "#1F7A45", Dark: "#8BD5A4"},
+		DiffDel:     lipgloss.AdaptiveColor{Light: "#B02A2A", Dark: "#F08A8A"},
+		Border:      lipgloss.AdaptiveColor{Light: "#C6C7CE", Dark: "#33343D"},
+		Panel:       lipgloss.AdaptiveColor{Light: "#F2F2F5", Dark: "#1C1D24"},
+		Activity:    lipgloss.AdaptiveColor{Light: "#1667D8", Dark: "#5AA9FF"},
+		ActivityDim: lipgloss.AdaptiveColor{Light: "#7FA9DC", Dark: "#2F5D8F"},
 	}
 }
 
@@ -52,9 +56,13 @@ func defaultTheme() theme {
 type styles struct {
 	theme theme
 
-	header    lipgloss.Style
-	headerKey lipgloss.Style
-	statusBar lipgloss.Style
+	header            lipgloss.Style
+	headerKey         lipgloss.Style
+	statusBar         lipgloss.Style
+	activityMarker    lipgloss.Style
+	activityMarkerDim lipgloss.Style
+	activityLabel     lipgloss.Style
+	activityMeta      lipgloss.Style
 
 	userPrefix      lipgloss.Style
 	userText        lipgloss.Style
@@ -71,6 +79,8 @@ type styles struct {
 
 	editorBox   lipgloss.Style
 	editorHint  lipgloss.Style
+	scrollRail  lipgloss.Style
+	scrollThumb lipgloss.Style
 	completion  lipgloss.Style
 	compActive  lipgloss.Style
 	overlayBox  lipgloss.Style
@@ -93,6 +103,11 @@ func newStyles(t theme) styles {
 		headerKey: lipgloss.NewStyle().Foreground(t.Muted),
 		statusBar: lipgloss.NewStyle().Foreground(t.Muted),
 
+		activityMarker:    lipgloss.NewStyle().Foreground(t.Activity).Bold(true),
+		activityMarkerDim: lipgloss.NewStyle().Foreground(t.ActivityDim),
+		activityLabel:     lipgloss.NewStyle().Foreground(t.Activity).Bold(true),
+		activityMeta:      lipgloss.NewStyle().Foreground(t.Faint),
+
 		userPrefix:      lipgloss.NewStyle().Foreground(t.User).Bold(true),
 		userText:        lipgloss.NewStyle().Foreground(t.Base),
 		assistantPrefix: lipgloss.NewStyle().Foreground(t.Accent).Bold(true),
@@ -110,7 +125,9 @@ func newStyles(t theme) styles {
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(t.Border).
 			Padding(0, 1),
-		editorHint: lipgloss.NewStyle().Foreground(t.Faint),
+		editorHint:  lipgloss.NewStyle().Foreground(t.Faint),
+		scrollRail:  lipgloss.NewStyle().Foreground(t.Faint),
+		scrollThumb: lipgloss.NewStyle().Foreground(t.AccentSoft),
 		completion: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(t.Border).
