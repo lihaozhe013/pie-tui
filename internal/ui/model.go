@@ -551,6 +551,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.showContextPanel()
 		return m, nil
 
+	case sessionSearchMsg:
+		return m.applySessionSearch(msg)
+
 	case projectsMsg:
 		return m.applyProjects(msg)
 

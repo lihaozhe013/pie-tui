@@ -126,6 +126,12 @@ clients keeps its preset and its Plan mode. If the extension fails to load, the
 UI reports `unavailable` in Settings › General and refuses preset changes
 rather than silently diverging.
 
+`/search` reads session files directly, newest first: a name or directory
+match is checked before reading the body, and the transcript scan unmarshals
+each matching line and walks its string values so the snippet reads as text.
+The scan is capped per file so a huge session cannot stall the picker; the
+result resumes the session through the existing `switch_session` path.
+
 `/context` is fed by `/pie-publish`, not by the UI guessing: the bridge reads
 `getActiveTools`, `getAllTools`, `getSystemPrompt`, and the session's work mode,
 and marks each tool active at publish time. The panel lists the tools, offers

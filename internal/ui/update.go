@@ -731,6 +731,15 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 		overlay.action = "session-name"
 		m.openOverlay(overlay)
 		return nil, true
+	case "/search":
+		if argument != "" {
+			return m.searchSessions(argument), true
+		}
+		request := &rpc.ExtensionUIRequestEvent{Title: "Search sessions", Method: "input", Placeholder: "jsonc parser"}
+		overlay := newInputOverlay(request)
+		overlay.action = "session-search"
+		m.openOverlay(overlay)
+		return nil, true
 	case "/context":
 		return m.openContext(), true
 	case "/image":
@@ -1319,6 +1328,11 @@ func (m *Model) selectOverlayItem() tea.Cmd {
 				return m.openDirectoryPicker(start)
 			}
 			return m.switchProject(item.Value)
+		case "session-search-hit":
+			m.closeOverlay()
+			m.sessionsAll = false
+			m.transcript.Clear()
+			return m.switchSession(item.Value)
 		case "cwd-browse":
 			return m.browseTo(item.Value)
 		case "skill-search-results":
@@ -1352,6 +1366,9 @@ func (m *Model) answerInput(value string) tea.Cmd {
 
 	if action == "session-name" {
 		return m.setSessionName(value)
+	}
+	if action == "session-search" {
+		return m.searchSessions(value)
 	}
 	if action == "skill-search" {
 		m.setToast("searching skills.sh…")
