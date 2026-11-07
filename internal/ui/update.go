@@ -17,6 +17,29 @@ import (
 )
 
 // handleEvent folds one protocol event into the UI state.
+// settingsTabID resolves a slash argument to a Settings tab.
+func settingsTabID(name string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "general":
+		return "general", true
+	case "instructions", "agents", "prompt":
+		return "instructions", true
+	case "appearance", "theme":
+		return "appearance", true
+	case "models", "model":
+		return "models", true
+	case "tools", "tool", "presets", "preset":
+		return "tools", true
+	case "skills", "skill":
+		return "skills", true
+	case "plugins", "plugin", "packages":
+		return "plugins", true
+	case "mcp":
+		return "mcp", true
+	}
+	return "", false
+}
+
 func (m *Model) handleEvent(event rpc.Event) (tea.Model, tea.Cmd) {
 	switch ev := event.(type) {
 	case *rpc.AgentStartEvent:
@@ -790,6 +813,14 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 		}
 		return m.generateTitle(), true
 	case "/settings":
+		if argument != "" {
+			tabID, ok := settingsTabID(argument)
+			if !ok {
+				m.setToast("unknown settings tab: " + argument)
+				return nil, true
+			}
+			return m.openSettingsAt(tabID), true
+		}
 		return m.openSettings(), true
 	case "/preset":
 		if argument != "" {

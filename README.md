@@ -151,7 +151,7 @@ memory from other CLIs keeps working.
 
 | Command | Aliases | Description |
 |---|---|---|
-| `/settings` | `/config`, `/prefs` | open the settings panel |
+| `/settings` | `/config`, `/prefs` | open the settings panel; `/settings models` opens a tab |
 | `/preset` | `/tools` | change the tool preset (`/preset plan`, `/preset configured`, or a custom name) |
 | `/model` | `/models` | switch model |
 | `/think` | | cycle the thinking level |

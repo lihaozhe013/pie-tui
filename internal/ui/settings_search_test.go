@@ -50,3 +50,19 @@ func TestSettingsSearchNoMatch(t *testing.T) {
 		t.Fatal("picker opened for no matches")
 	}
 }
+
+func TestSettingsTabID(t *testing.T) {
+	cases := map[string]string{
+		"models": "models", "model": "models", "theme": "appearance",
+		"agents": "instructions", "packages": "plugins", "TOOLS": "tools",
+	}
+	for input, want := range cases {
+		got, ok := settingsTabID(input)
+		if !ok || got != want {
+			t.Fatalf("%q -> %q %v, want %q", input, got, ok, want)
+		}
+	}
+	if _, ok := settingsTabID("nope"); ok {
+		t.Fatal("unknown tab accepted")
+	}
+}
