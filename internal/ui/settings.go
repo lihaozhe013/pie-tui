@@ -595,21 +595,6 @@ func (m *Model) buildSettingsTabs() []settingsTab {
 	}
 }
 
-func placeholderTab(id, label, note string) settingsTab {
-	return settingsTab{
-		ID:    id,
-		Label: label,
-		Note:  "Not implemented yet.",
-		Rows: []settingsRow{{
-			ID:      id + "-placeholder",
-			Label:   label,
-			Kind:    settingsInfo,
-			Current: func() string { return note },
-			Help:    "This phase of the parity plan is still open.",
-		}},
-	}
-}
-
 func (m *Model) generalSettingsTab() settingsTab {
 	tab := settingsTab{ID: "general", Label: "General", Note: "Shared settings are written to pi's files immediately."}
 
