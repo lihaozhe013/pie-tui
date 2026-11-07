@@ -75,6 +75,15 @@ func (m *Model) handleEvent(event rpc.Event) (tea.Model, tea.Cmd) {
 		m.state.SessionName = ev.Name
 		return m, m.waitEvent()
 
+	case *rpc.EntryAppendedEvent:
+		var entry session.LogEntry
+		if err := json.Unmarshal(ev.Entry, &entry); err == nil {
+			m.logEntries = append(m.logEntries, entry)
+			m.selection, m.hasSelection = session.ReadToolSelection(m.logEntries)
+			m.currentMode = session.ReadWorkMode(m.logEntries)
+		}
+		return m, m.waitEvent()
+
 	case *rpc.CompactionStartEvent:
 		m.addNotice(fmt.Sprintf("compacting context (%s)…", ev.Reason))
 		if !m.activity.compacting {
@@ -708,6 +717,16 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 		return nil, true
 	case "/settings":
 		return m.openSettings(), true
+	case "/preset":
+		if argument != "" {
+			selection, ok := m.resolvePresetArg(argument)
+			if !ok {
+				m.setToast("unknown preset: " + argument)
+				return nil, true
+			}
+			return m.applyPreset(selection), true
+		}
+		return m.openPresetPicker(), true
 	default:
 		return nil, false
 	}
@@ -944,12 +963,15 @@ func (m *Model) applyResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 
 	case "new_session":
 		m.transcript.Clear()
+		m.hasSelection = false
+		m.currentMode = ""
+		m.logEntries = nil
 		m.addNotice("started a new session")
-		return m, tea.Batch(m.refreshState(), m.refreshStats())
+		return m, tea.Batch(m.refreshState(), m.refreshStats(), m.loadEntries())
 
 	case "switch_session":
 		m.transcript.Clear()
-		return m, tea.Batch(m.refreshState(), m.refreshStats())
+		return m, tea.Batch(m.refreshState(), m.refreshStats(), m.loadEntries())
 
 	case "compact":
 		m.setToast("context compacted")
@@ -1159,6 +1181,9 @@ func (m *Model) selectOverlayItem() tea.Cmd {
 		case "settings-choice":
 			m.closeOverlay()
 			return m.applySettingChoice(item.Value)
+		case "preset":
+			m.closeOverlay()
+			return m.applyPreset(item.Value)
 		default:
 			m.closeOverlay()
 			return nil

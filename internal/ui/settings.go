@@ -48,6 +48,8 @@ type settingsTab struct {
 // settingsState survives a round trip through a picker or the instruction
 // editor, so the cursor returns where the user left it.
 type settingsState struct {
+	title  string
+	single bool
 	tabs   []settingsTab
 	active int
 	row    int
@@ -61,12 +63,19 @@ type settingsState struct {
 }
 
 func newSettingsState(m *Model) *settingsState {
+	return newSettingsPanel("Settings", m.buildSettingsTabs())
+}
+
+func newSettingsPanel(title string, tabs []settingsTab) *settingsState {
 	input := textinput.New()
 	input.Prompt = ""
 	input.CharLimit = 0
-
-	s := &settingsState{tabs: m.buildSettingsTabs(), input: input}
-	return s
+	return &settingsState{
+		title:  title,
+		single: len(tabs) <= 1,
+		tabs:   tabs,
+		input:  input,
+	}
 }
 
 // rebuild refreshes the rows from disk while keeping the selected tab and row.
@@ -176,10 +185,14 @@ func (s *settingsState) View(st styles, width, height int) string {
 	}
 	railWidth := 18
 	innerWidth := boxWidth - 4
-	if innerWidth < railWidth+12 {
-		railWidth = maxInt(10, innerWidth/3)
-	}
 	contentWidth := maxInt(12, innerWidth-railWidth-2)
+	if s.single {
+		railWidth = 0
+		contentWidth = maxInt(12, innerWidth)
+	} else if innerWidth < railWidth+12 {
+		railWidth = maxInt(10, innerWidth/3)
+		contentWidth = maxInt(12, innerWidth-railWidth-2)
+	}
 
 	rowsHeight := height - 8
 	if s.editing {
@@ -199,19 +212,21 @@ func (s *settingsState) View(st styles, width, height int) string {
 
 	// Left rail: one line per tab, padded to the rail width.
 	rail := make([]string, 0, rowsHeight)
-	for i := 0; i < rowsHeight; i++ {
-		if i < len(s.tabs) {
-			entry := s.tabs[i]
-			prefix := "  "
-			if i == s.active {
-				prefix = "› "
-				rail = append(rail, padRight(st.pickerSel.Render(prefix+entry.Label), railWidth))
-			} else {
-				rail = append(rail, padRight(st.muted.Render(prefix+entry.Label), railWidth))
+	if !s.single {
+		for i := 0; i < rowsHeight; i++ {
+			if i < len(s.tabs) {
+				entry := s.tabs[i]
+				prefix := "  "
+				if i == s.active {
+					prefix = "› "
+					rail = append(rail, padRight(st.pickerSel.Render(prefix+entry.Label), railWidth))
+				} else {
+					rail = append(rail, padRight(st.muted.Render(prefix+entry.Label), railWidth))
+				}
+				continue
 			}
-			continue
+			rail = append(rail, strings.Repeat(" ", railWidth))
 		}
-		rail = append(rail, strings.Repeat(" ", railWidth))
 	}
 
 	// Right pane: rows, then help and hints.
@@ -226,9 +241,13 @@ func (s *settingsState) View(st styles, width, height int) string {
 	}
 
 	lines := make([]string, 0, height)
-	title := st.overlayHead.Render("Settings") + st.overlayHint.Render("  ·  "+tab.Label)
+	title := st.overlayHead.Render(s.title) + st.overlayHint.Render("  ·  "+tab.Label)
 	lines = append(lines, padRight(title, innerWidth))
 	for i := 0; i < rowsHeight; i++ {
+		if s.single {
+			lines = append(lines, detail[i])
+			continue
+		}
 		lines = append(lines, rail[i]+"  "+detail[i])
 	}
 
@@ -251,6 +270,8 @@ func (s *settingsState) View(st styles, width, height int) string {
 		lines = append(lines, st.notice.Render(truncateLine(s.notice, innerWidth)))
 	case s.editing:
 		lines = append(lines, st.overlayHint.Render("enter save · esc cancel"))
+	case s.single:
+		lines = append(lines, st.overlayHint.Render("↑/↓ move · enter change · esc back"))
 	default:
 		lines = append(lines, st.overlayHint.Render("↑/↓ move · ←/→ tab · enter change · r reload · esc close"))
 	}
@@ -352,6 +373,10 @@ func (m *Model) handleSettingsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	tab := s.currentTab()
 	switch key {
 	case "esc", "q":
+		if m.overlay.action == "preset-editor" {
+			m.presetDraft = nil
+			return m, m.openSettingsAt("tools")
+		}
 		m.closeOverlay()
 		return m, nil
 	case "ctrl+c":
@@ -479,7 +504,7 @@ func (m *Model) applySettingChoice(value string) tea.Cmd {
 func (m *Model) openSettings() tea.Cmd {
 	m.reloadConfig()
 	m.openSettingsOverlay()
-	return nil
+	return tea.Batch(m.loadEntries(), m.loadToolSnapshot())
 }
 
 func (m *Model) openSettingsOverlay() {
@@ -518,7 +543,7 @@ func (m *Model) buildSettingsTabs() []settingsTab {
 		m.instructionsSettingsTab(),
 		m.appearanceSettingsTab(),
 		placeholderTab("models", "Models", "Provider, model, reasoning, and endpoint settings will live here."),
-		placeholderTab("tools", "Tools", "Built-in presets, custom presets, and Plan mode will live here."),
+		m.toolsSettingsTab(),
 		placeholderTab("skills", "Skills", "Installed skills and their model-invocation switches will live here."),
 		placeholderTab("plugins", "Plugins", "Pi packages and their resources will live here."),
 		placeholderTab("mcp", "MCP", "MCP servers, transports, and sign-in will live here."),

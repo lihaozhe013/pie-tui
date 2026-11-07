@@ -20,6 +20,7 @@ type builtinCommand struct {
 // "continue" is never shadowed by the /resume alias.
 var builtinCommandTable = []builtinCommand{
 	{Name: "/settings", Detail: "open settings", Aliases: []string{"/config", "/prefs"}},
+	{Name: "/preset", Detail: "change the tool preset", Aliases: []string{"/tools"}},
 	{Name: "/model", Detail: "switch model", Aliases: []string{"/models"}},
 	{Name: "/think", Detail: "cycle thinking level"},
 	{Name: "/new", Detail: "start a new session"},

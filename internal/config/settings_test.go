@@ -320,3 +320,15 @@ func TestTUIConfigDefaultsAndWrites(t *testing.T) {
 		t.Fatal("expected an invalid layout error")
 	}
 }
+
+func TestPresetFileMissingIsEmptyAndValid(t *testing.T) {
+	t.Parallel()
+
+	file := LoadPresets(testPaths(t))
+	if file.Invalid() != nil {
+		t.Fatalf("missing file reported invalid: %v", file.Invalid())
+	}
+	if len(file.Presets()) != 0 {
+		t.Fatalf("presets = %+v", file.Presets())
+	}
+}

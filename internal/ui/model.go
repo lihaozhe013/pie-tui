@@ -97,6 +97,21 @@ type (
 	statsMsg struct{ stats rpc.SessionStats }
 
 	stateMsg struct{ state rpc.State }
+
+	entriesMsg struct {
+		entries []session.LogEntry
+		err     error
+	}
+
+	snapshotMsg struct {
+		snapshot toolSnapshot
+		err      error
+	}
+
+	presetAppliedMsg struct {
+		selection string
+		err       error
+	}
 )
 
 // streamState accumulates one streaming assistant response.
@@ -166,6 +181,14 @@ type Model struct {
 	// a command handled by an extension can take it back.
 	pendingPrompt     *block
 	pendingPromptText string
+
+	presetFile   *config.PresetFile
+	presetDraft  *presetDraft
+	toolSnapshot *toolSnapshot
+	logEntries   []session.LogEntry
+	selection    session.ToolSelection
+	hasSelection bool
+	currentMode  string
 }
 
 // New builds the model around a connected client.
@@ -224,6 +247,7 @@ func (m *Model) reloadConfig() {
 	} else {
 		m.prefs = prefs
 	}
+	m.presetFile = config.LoadPresets(m.paths)
 }
 
 // Init starts the event pump, the startup handshake, and the idle heartbeat.
@@ -419,9 +443,9 @@ func (m *Model) applyHandshake(msg handshakeMsg) (tea.Model, tea.Cmd) {
 		m.activity.begin()
 		m.layout()
 		m.transcript.Add(newBlock(blockNotice, "attached to a running turn"))
-		return m, m.scheduleTick()
+		return m, tea.Batch(m.scheduleTick(), m.loadEntries())
 	}
-	return m, nil
+	return m, m.loadEntries()
 }
 
 // commandItems merges built-ins with the commands pi reported. A built-in alias
@@ -603,6 +627,9 @@ func (m *Model) renderHeader() string {
 	}
 	if m.state.SessionName != "" {
 		segments = append(segments, m.styles.muted.Render(m.state.SessionName))
+	}
+	if id := m.currentPresetID(); id != "configured" {
+		segments = append(segments, m.styles.muted.Render("tools:"+m.presetLabel(id)))
 	}
 
 	return truncateLine(strings.Join(segments, m.styles.muted.Render(" · ")), m.width)

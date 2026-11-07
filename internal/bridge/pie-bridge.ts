@@ -143,7 +143,7 @@ export default function (pi) {
         policy = tokens.shift();
       }
       const names = tokens.join(" ").split(",").map((name) => name.trim()).filter(Boolean);
-      if (names.length === 0 || names.some((name) => !TOOL_NAME.test(name))) {
+      if (names.some((name) => !TOOL_NAME.test(name))) {
         ctx.ui.notify("pie-tools: invalid tool list", "error");
         return;
       }

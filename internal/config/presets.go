@@ -121,6 +121,11 @@ func LoadPresets(paths Paths) *PresetFile {
 		}
 		return &PresetFile{path: path, invalid: err}
 	}
+	if !doc.Existed() || doc.Root().Len() == 0 {
+		// A missing file, and the empty object an interrupted first write can
+		// leave, both mean "no presets yet".
+		return &PresetFile{path: path}
+	}
 	presets, parseErr := ParsePresets(doc.Root())
 	if parseErr != nil {
 		return &PresetFile{path: path, invalid: parseErr}

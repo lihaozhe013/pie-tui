@@ -98,6 +98,34 @@ so a fast token stream cannot saturate the CPU. An unterminated fence gets a
 synthetic closing marker so code does not flicker between paragraph and block
 styling.
 
+## Configuration and the bridge
+
+`pie-tui` and Pie share every file in pi's agent directory
+(`PI_CODING_AGENT_DIR`, default `~/.pi/agent`):
+
+- `settings.json`, `models.json`, `auth.json`, `mcp.json`, and `AGENTS.md` are
+  pi's own files.
+- `pie-model-settings.json`, `pie-tool-presets.json`, and the session log's
+  `pie:tool-selection` / `pie:work-mode` entries are Pie's files; the TUI reads
+  and writes the same shapes.
+- `pie-tui-settings.json` holds terminal-only choices: theme, thinking-block
+  visibility, tool expansion, and the last working directory.
+
+`internal/config` owns this layer. Documents keep object member order, JSONC
+comments and trailing commas are accepted, writes are private (0600), atomic,
+and serialized with a lock file beside the target, and a file that cannot be
+parsed is backed up (`.corrupt-<timestamp>`) instead of being silently replaced.
+
+`pi --mode rpc` does not expose tool switching, reload, or a system-prompt
+read, so the binary embeds a small extension (`internal/bridge/pie-bridge.ts`),
+writes it to `<state-dir>/bridge/`, and passes it with `-e`. The extension
+registers `/pie-tools`, `/pie-mode`, `/pie-reload`, and `/pie-publish`; the UI
+drives them with ordinary `prompt` commands. Tool selections and work modes are
+written as the same session entries Pie uses, so a session moved between the
+clients keeps its preset and its Plan mode. If the extension fails to load, the
+UI reports `unavailable` in Settings › General and refuses preset changes
+rather than silently diverging.
+
 ## Startup and shutdown
 
 1. Resolve `pi` (flag, environment, `PATH`). Missing binaries print install
@@ -139,5 +167,5 @@ PI_TUI_E2E_BIN=$(command -v pi) go test ./internal/rpc -run TestRealPi -v
   dedicated panel.
 - The diff view is prefix/suffix based. It is exact for edit tools' replacement
   snippets, but a full Myers diff is not implemented.
-- Built-in TUI-only pi commands (`/settings`, `/hotkeys`, ...) do not exist in
-  RPC mode and are not offered.
+- Built-in TUI-only pi commands (`/hotkeys`, ...) do not exist in RPC mode and
+  are not offered; the client implements its own `/settings` panel.
