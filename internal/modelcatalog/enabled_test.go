@@ -59,3 +59,33 @@ func TestSetEnabledEditsMinimally(t *testing.T) {
 		t.Fatalf("materialize = %v", next)
 	}
 }
+
+func TestEnabledPatternsMatchPisRules(t *testing.T) {
+	t.Parallel()
+
+	models := []*Model{
+		{ProviderID: "zai", ID: "glm-5.3", Name: "GLM-5.3"},
+		{ProviderID: "zai", ID: "glm-5.3-highspeed", Name: "GLM-5.3 Highspeed"},
+		{ProviderID: "p", ID: "a/b"},
+	}
+	enabled, _, _ := EnabledSet([]string{"zai/glm-5.3"}, true, models)
+	if !enabled["zai/glm-5.3"] || enabled["zai/glm-5.3-highspeed"] {
+		t.Fatalf("qualified exact = %v", enabled)
+	}
+	enabled, _, _ = EnabledSet([]string{"glm-5.3"}, true, models)
+	if !enabled["zai/glm-5.3"] || enabled["zai/glm-5.3-highspeed"] {
+		t.Fatalf("bare exact = %v", enabled)
+	}
+	enabled, _, _ = EnabledSet([]string{"p/*"}, true, models)
+	if enabled["p/a/b"] {
+		t.Fatalf("single star crossed a slash: %v", enabled)
+	}
+	enabled, _, _ = EnabledSet([]string{"p/**"}, true, models)
+	if !enabled["p/a/b"] {
+		t.Fatalf("double star missed a nested id: %v", enabled)
+	}
+	enabled, _, _ = EnabledSet([]string{"highspeed"}, true, models)
+	if !enabled["zai/glm-5.3-highspeed"] || enabled["zai/glm-5.3"] {
+		t.Fatalf("fuzzy best match = %v", enabled)
+	}
+}
