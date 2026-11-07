@@ -334,8 +334,11 @@ the full suite is not run.
   `set_session_name`.
 - Commands: `/title` and `/name` manual rename; a session-picker action with
   idle, naming, success, and error states.
-- Acceptance: titles are generated for both English and CJK sessions; failures
-  surface as an error block.
+- Automatic naming: an unnamed session is named after its first settled turn,
+  and again when it is resumed or attached. The resume picker reads the newest
+  `session_info` name from anywhere in the file, not just a fixed tail probe.
+- Acceptance: titles are generated for both English and CJK sessions; manual
+  failures surface as an error block while automatic failures stay silent.
 
 ### P5: Goal
 

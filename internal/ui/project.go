@@ -190,6 +190,9 @@ func (m *Model) applyProjectSwitch(msg projectSwitchedMsg) (tea.Model, tea.Cmd) 
 
 	m.client = msg.client
 	m.opts.CWD = msg.dir
+	m.sessionEpoch.Add(1)
+	m.autoTitlePending = false
+	m.invalidateTitle()
 	m.transcript.Clear()
 	m.state = rpc.State{}
 	m.queue = rpc.QueueUpdateEvent{}

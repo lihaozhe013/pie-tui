@@ -57,9 +57,14 @@ func (m *Model) handleEvent(event rpc.Event) (tea.Model, tea.Cmd) {
 		m.finishStream()
 		m.transcript.MarkDirty()
 		commands := []tea.Cmd{m.waitEvent(), m.refreshStats()}
-		if m.autoTitlePending && !ev.Aborted && m.state.SessionName == "" {
-			m.autoTitlePending = false
-			commands = append(commands, m.generateAutoTitle())
+		if m.autoTitlePending {
+			if m.state.SessionName != "" {
+				m.autoTitlePending = false
+			} else if !ev.Aborted && !m.titleRunning {
+				m.autoTitlePending = false
+				requestID := m.beginTitleRequest()
+				commands = append(commands, m.generateTitleCommandWithMessages(nil, true, requestID))
+			}
 		}
 		return m, tea.Batch(commands...)
 
@@ -104,6 +109,9 @@ func (m *Model) handleEvent(event rpc.Event) (tea.Model, tea.Cmd) {
 
 	case *rpc.SessionInfoChangedEvent:
 		m.state.SessionName = ev.Name
+		// A name set by the user or another client invalidates an in-flight
+		// title, which must not overwrite it.
+		m.sessionEpoch.Add(1)
 		return m, m.waitEvent()
 
 	case *rpc.EntryAppendedEvent:
@@ -1093,7 +1101,13 @@ func (m *Model) switchSession(path string) tea.Cmd {
 			return historyMsg{err: err}
 		}
 		payload, _ := rpc.DecodeTyped[rpc.MessagesPayload](response)
-		return historyMsg{messages: payload.Messages}
+		msg := historyMsg{messages: payload.Messages}
+		if stateResponse, stateErr := client.DoOK(ctx, rpc.GetState()); stateErr == nil {
+			if state, decodeErr := rpc.DecodeTyped[rpc.State](stateResponse); decodeErr == nil {
+				msg.state = &state
+			}
+		}
+		return msg
 	}
 }
 
@@ -1120,18 +1134,53 @@ func (m *Model) exportSession() tea.Cmd {
 // generateTitle asks a one-shot model call to name the session from the
 // transcript, matching the web UI's auto-name action.
 func (m *Model) generateTitle() tea.Cmd {
-	return m.generateTitleCommand(false)
+	if m.titleRunning {
+		m.setToast("title generation already running")
+		return nil
+	}
+	requestID := m.beginTitleRequest()
+	return m.generateTitleCommandWithMessages(nil, false, requestID)
 }
 
-// generateAutoTitle names an unnamed session after its first settled turn.
-func (m *Model) generateAutoTitle() tea.Cmd {
-	return m.generateTitleCommand(true)
+// beginTitleRequest reserves the single title slot and returns its id. The
+// request id lets a late result from an older request leave the slot alone.
+func (m *Model) beginTitleRequest() uint64 {
+	m.titleSeq++
+	m.titleRequest = m.titleSeq
+	m.titleRunning = true
+	return m.titleRequest
 }
 
-func (m *Model) generateTitleCommand(silent bool) tea.Cmd {
+// invalidateTitle drops the current title request. A late result is ignored
+// because its request id no longer matches.
+func (m *Model) invalidateTitle() {
+	m.titleRunning = false
+	m.titleRequest = 0
+}
+
+// hasTitleHistory reports whether a session has enough conversational text to
+// name. Tool-only history is not useful to the title model.
+func (m *Model) hasTitleHistory(messages []rpc.Message) bool {
+	return title.Transcript(messages) != ""
+}
+
+// autoTitleFromHistory starts a best-effort title request for a resumed or
+// attached unnamed session. It returns nil when the session already has a
+// name, another request is running, or there is nothing to title.
+func (m *Model) autoTitleFromHistory(messages []rpc.Message) tea.Cmd {
+	if m.state.SessionName != "" || m.titleRunning || !m.hasTitleHistory(messages) {
+		return nil
+	}
+	requestID := m.beginTitleRequest()
+	return m.generateTitleCommandWithMessages(messages, true, requestID)
+}
+
+func (m *Model) generateTitleCommandWithMessages(messages []rpc.Message, silent bool, requestID uint64) tea.Cmd {
 	client := m.client
 	bin := m.opts.PiBin
 	model := m.state.Model
+	sessionID := m.state.SessionID
+	epoch := m.sessionEpoch.Load()
 	level := "off"
 	modelRef := ""
 	if model != nil {
@@ -1141,37 +1190,54 @@ func (m *Model) generateTitleCommand(silent bool) tea.Cmd {
 		}
 	}
 
+	result := func(msg titleMsg) tea.Msg {
+		msg.sessionID = sessionID
+		msg.requestID = requestID
+		return msg
+	}
+
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		response, err := client.DoOK(ctx, rpc.GetMessages())
-		cancel()
-		if err != nil {
-			return titleMsg{err: err, silent: silent}
+		if client == nil {
+			return result(titleMsg{err: errors.New("not connected"), silent: silent})
 		}
-		payload, err := rpc.DecodeTyped[rpc.MessagesPayload](response)
-		if err != nil {
-			return titleMsg{err: err, silent: silent}
+		if messages == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			response, err := client.DoOK(ctx, rpc.GetMessages())
+			cancel()
+			if err != nil {
+				return result(titleMsg{err: err, silent: silent})
+			}
+			payload, err := rpc.DecodeTyped[rpc.MessagesPayload](response)
+			if err != nil {
+				return result(titleMsg{err: err, silent: silent})
+			}
+			messages = payload.Messages
 		}
-		transcript := title.Transcript(payload.Messages)
+		transcript := title.Transcript(messages)
 		if transcript == "" {
-			return titleMsg{err: errors.New("nothing to title yet"), silent: silent}
+			return result(titleMsg{err: errors.New("nothing to title yet"), silent: silent})
 		}
 
 		genCtx, cancel := context.WithTimeout(context.Background(), title.Timeout)
 		defer cancel()
 		name, err := title.Generate(genCtx, title.Options{PiBin: bin, Model: modelRef, Thinking: level}, transcript)
 		if err != nil {
-			return titleMsg{err: err, silent: silent}
+			return result(titleMsg{err: err, silent: silent})
+		}
+		if m.sessionEpoch.Load() != epoch {
+			return result(titleMsg{err: errors.New("session changed or renamed while generating title"), silent: silent})
 		}
 
 		setCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		setResponse, err := client.DoOK(setCtx, rpc.SetSessionName(name))
-		return titleMsg{title: name, resp: setResponse, err: err, silent: silent}
+		return result(titleMsg{title: name, resp: setResponse, err: err, silent: silent})
 	}
 }
 
 func (m *Model) setSessionName(name string) tea.Cmd {
+	m.sessionEpoch.Add(1)
+	m.invalidateTitle()
 	client := m.client
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -1239,8 +1305,10 @@ func (m *Model) applyResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "new_session":
+		m.sessionEpoch.Add(1)
 		m.transcript.Clear()
 		m.autoTitlePending = false
+		m.invalidateTitle()
 		m.state.SessionName = ""
 		m.hasSelection = false
 		m.currentMode = ""
@@ -1249,8 +1317,10 @@ func (m *Model) applyResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.refreshState(), m.refreshStats(), m.loadEntries())
 
 	case "switch_session":
+		m.sessionEpoch.Add(1)
 		m.transcript.Clear()
 		m.autoTitlePending = false
+		m.invalidateTitle()
 		return m, tea.Batch(m.refreshState(), m.refreshStats(), m.loadEntries())
 
 	case "compact":

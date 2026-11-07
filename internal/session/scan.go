@@ -59,8 +59,8 @@ const (
 	headerLimit = 1 << 20
 	// firstMessageLimit bounds the prefix scanned for the first prompt.
 	firstMessageLimit = 64 << 10
-	// tailProbe bounds how much of the file we scan for the display name.
-	tailProbe = 64 << 10
+	// nameChunk is the backward read size used to find the newest name.
+	nameChunk = 64 << 10
 )
 
 // Dir resolves the session directory. Precedence matches pi: explicit
@@ -284,35 +284,70 @@ func truncateLabel(text string, limit int) string {
 	return strings.TrimSpace(string(runes[:limit-1])) + "…"
 }
 
-// readName scans the tail of the file for the newest session_info name. Names
-// are only ever set or cleared, so scanning backwards is enough.
+// readName finds the newest session_info entry by reading the file backwards
+// in chunks. A fixed tail probe is not enough: an auto-generated name is
+// written early in a session, and a long conversation can push it megabytes
+// away from the end. Scanning stops at the first entry found, so the common
+// case only reads one chunk.
 func readName(file *os.File, size int64) string {
-	start := size - tailProbe
-	if start < 0 {
-		start = 0
-	}
-	buf := make([]byte, size-start)
-	if _, err := file.ReadAt(buf, start); err != nil && !errors.Is(err, io.EOF) {
+	if size <= 0 {
 		return ""
 	}
 
-	name := ""
-	for _, line := range strings.Split(string(buf), "\n") {
-		if !strings.Contains(line, `"session_info"`) {
-			continue
+	var pending []byte
+	offset := size
+	for offset > 0 {
+		n := int64(nameChunk)
+		if offset < n {
+			n = offset
 		}
-		var info struct {
-			Type string  `json:"type"`
-			Name *string `json:"name"`
+		offset -= n
+		buf := make([]byte, n)
+		if _, err := file.ReadAt(buf, offset); err != nil && !errors.Is(err, io.EOF) {
+			return ""
 		}
-		if err := json.Unmarshal([]byte(line), &info); err != nil || info.Type != "session_info" {
-			continue
+
+		data := buf
+		if len(pending) > 0 {
+			data = append(buf, pending...)
 		}
-		if info.Name == nil {
-			name = ""
-			continue
+		lines := strings.Split(string(data), "\n")
+		start := 0
+		if offset > 0 {
+			// The first line may begin before this chunk.
+			start = 1
 		}
-		name = *info.Name
+		for i := len(lines) - 1; i >= start; i-- {
+			if name, ok := parseSessionNameLine(lines[i]); ok {
+				return name
+			}
+		}
+		if offset > 0 {
+			pending = []byte(lines[0])
+		} else {
+			pending = nil
+		}
 	}
-	return name
+	return ""
+}
+
+// parseSessionNameLine parses one JSONL record and reports whether it is a
+// session_info entry. A null or missing name is a deliberate clear, so it
+// still counts as a match and stops the backward scan.
+func parseSessionNameLine(line string) (string, bool) {
+	line = strings.TrimSuffix(line, "\r")
+	if !strings.Contains(line, `"session_info"`) {
+		return "", false
+	}
+	var info struct {
+		Type string  `json:"type"`
+		Name *string `json:"name"`
+	}
+	if err := json.Unmarshal([]byte(line), &info); err != nil || info.Type != "session_info" {
+		return "", false
+	}
+	if info.Name == nil {
+		return "", true
+	}
+	return strings.TrimSpace(*info.Name), true
 }

@@ -60,9 +60,11 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
 - Plan mode shows a `plan` chip in the header and a "writes blocked" hint;
   project MCP and package writes follow pi's `trust.json`, inherited from a
   parent folder, and refuse to edit untrusted project resources
-- An unnamed session is titled automatically after its first settled turn; the
-  generation runs as a one-shot background `pi --print`, and failures stay out
-  of the transcript
+- An unnamed session is titled automatically after its first settled turn and
+  when it is resumed or attached; the generation runs as a one-shot background
+  `pi --print` and writes the name through `set_session_name`. The resume
+  picker reads the newest name even when a long conversation pushed it far from
+  the end of the session file. Failures stay out of the transcript
 - Branch tools: `/fork` lists forkable user messages and restores the chosen
   prompt to the editor, `/clone` duplicates the branch, and `/tree` prints the
   session tree with the current leaf marked
@@ -179,7 +181,7 @@ memory from other CLIs keeps working.
 | `/resume` | `/continue`, `/sessions` | resume another session |
 | `/compact` | `/compress` | compact the conversation |
 | `/name` | `/rename` | rename this session |
-| `/title` | | generate a title from the transcript with a one-shot model call |
+| `/title` | | regenerate the title from the transcript with a one-shot model call |
 | `/cwd` | `/dir`, `/project` | switch working directory; no argument opens the project picker |
 | `/image` | | attach a local image to a prompt (`/image shot.png what is this?`) |
 | `/context` | `/tools-view` | system prompt and tool definitions published by the bridge |

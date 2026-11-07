@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -113,14 +114,17 @@ type (
 
 	historyMsg struct {
 		messages []rpc.Message
+		state    *rpc.State
 		err      error
 	}
 
 	titleMsg struct {
-		silent bool
-		title  string
-		resp   *rpc.Response
-		err    error
+		silent    bool
+		title     string
+		sessionID string
+		requestID uint64
+		resp      *rpc.Response
+		err       error
 	}
 
 	statsMsg struct{ stats rpc.SessionStats }
@@ -222,8 +226,15 @@ type Model struct {
 	// a command handled by an extension can take it back.
 	pendingPrompt     *block
 	pendingPromptText string
-	// autoTitlePending asks the first settled turn to name an unnamed session.
+	// autoTitlePending asks the next settled turn to name an unnamed session.
 	autoTitlePending bool
+	// titleRunning prevents overlapping manual or automatic title requests.
+	titleRunning bool
+	// titleRequest identifies the request that owns titleRunning.
+	titleRequest uint64
+	titleSeq     uint64
+	// sessionEpoch invalidates in-flight title requests after a session switch.
+	sessionEpoch atomic.Uint64
 
 	presetFile    *config.PresetFile
 	presetDraft   *presetDraft
@@ -505,6 +516,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case stateMsg:
+		if m.state.SessionID != "" && msg.state.SessionID != "" && m.state.SessionID != msg.state.SessionID {
+			m.sessionEpoch.Add(1)
+			m.invalidateTitle()
+		}
 		m.state = msg.state
 		return m, nil
 
@@ -611,11 +626,29 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case historyMsg:
+		// A history load only happens after switch_session succeeded, so the
+		// old session's title request is no longer valid even if loading the
+		// messages failed.
+		m.sessionEpoch.Add(1)
+		m.autoTitlePending = false
+		m.invalidateTitle()
 		if msg.err != nil {
 			m.addError("load messages: " + msg.err.Error())
 			return m, nil
 		}
+		if msg.state != nil {
+			m.state = *msg.state
+		}
 		m.loadHistory(msg.messages)
+		if msg.state != nil {
+			if m.state.IsStreaming {
+				// Title the session once the in-flight turn settles. The history
+				// may still be incomplete here; the settled turn fetches it again.
+				m.autoTitlePending = m.state.SessionName == ""
+			} else if cmd := m.autoTitleFromHistory(msg.messages); cmd != nil {
+				return m, cmd
+			}
+		}
 		return m, nil
 
 	case entriesMsg:
@@ -709,6 +742,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case titleMsg:
+		if msg.requestID != 0 && msg.requestID != m.titleRequest {
+			// A newer request owns titleRunning.
+			return m, nil
+		}
+		m.invalidateTitle()
+		if msg.sessionID != "" && msg.sessionID != m.state.SessionID {
+			// The request belonged to a session the user already left.
+			return m, nil
+		}
 		if msg.silent {
 			// Auto-naming is best-effort: failures stay out of the transcript.
 			return m, nil
@@ -737,8 +779,10 @@ func (m *Model) applyHandshake(msg handshakeMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
+	m.sessionEpoch.Add(1)
 	m.state = msg.state
 	m.autoTitlePending = false
+	m.invalidateTitle()
 	m.models = msg.models
 	m.levels = msg.levels
 	m.commands = msg.commands
@@ -759,9 +803,15 @@ func (m *Model) applyHandshake(msg handshakeMsg) (tea.Model, tea.Cmd) {
 		m.activity.begin()
 		m.layout()
 		m.transcript.Add(newBlock(blockNotice, "attached to a running turn"))
+		m.autoTitlePending = m.state.SessionName == ""
 		return m, tea.Batch(m.scheduleTick(), m.loadEntries())
 	}
-	return m, m.loadEntries()
+
+	commands := []tea.Cmd{m.loadEntries()}
+	if cmd := m.autoTitleFromHistory(msg.history); cmd != nil {
+		commands = append(commands, cmd)
+	}
+	return m, tea.Batch(commands...)
 }
 
 // commandItems merges built-ins with the commands pi reported. A built-in alias

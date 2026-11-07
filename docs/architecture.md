@@ -66,9 +66,11 @@ backpressure to pi through the pipe instead of growing memory.
 
 Read-only scanning of pi's session directory (`~/.pi/agent/sessions` by default,
 `--session-dir`/`PI_CODING_AGENT_SESSION_DIR` override). It reads the header of
-each `.jsonl` file for the ID and working directory, and probes the tail for the
-newest `session_info` name. Broken files are skipped so one bad file cannot break
-the resume picker.
+each `.jsonl` file for the ID and working directory, and finds the newest
+`session_info` name by reading the file backwards in chunks. A fixed tail probe
+would miss a title written early in a session and later pushed megabytes from
+the end by a long conversation. Broken files are skipped so one bad file cannot
+break the resume picker.
 
 ### `internal/ui`
 
@@ -97,6 +99,16 @@ the resume picker.
 - `diff.go` — tool argument/result extraction and a dependency-free line diff.
 - `styles.go` — the Lip Gloss palette and the glamour style derived from it.
 - `view.go` — small formatting helpers.
+
+### Automatic titles
+
+An unnamed session is named automatically after its first settled turn, and
+again when an unnamed session is resumed or attached. The request is a one-shot
+`pi --print` subprocess with no tools or session state, and the result is written
+back through `set_session_name`, so Pie and the TUI see the same title. Only one
+request is allowed to write at a time, and a session switch or manual rename
+invalidates an in-flight result before it can rename the wrong session or
+overwrite a user's name. `/title` remains the explicit regenerate action.
 
 ### Selection
 
