@@ -1209,9 +1209,12 @@ func (m *Model) renderStatus() string {
 
 	var right string
 	if m.stats.Tokens.Total > 0 || m.stats.ContextUsage != nil {
-		right = formatTokens(m.stats.Tokens.Total)
+		// Show context used over the window limit ("200k / 256k"); fall
+		// back to the session total when the model reports no usage.
 		if usage := m.contextUsage(); usage != nil && usage.ContextWindow > 0 {
-			right += fmt.Sprintf(" · %.0f%% ctx", usage.Percent)
+			right = fmt.Sprintf("%s / %s", formatTokens(usage.Tokens), formatTokens(usage.ContextWindow))
+		} else {
+			right = formatTokens(m.stats.Tokens.Total)
 		}
 		right = m.styles.muted.Render(right)
 	}
