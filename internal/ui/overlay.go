@@ -291,5 +291,9 @@ func (o *overlay) renderPicker(body *strings.Builder, st styles) {
 	}
 
 	body.WriteString("\n\n")
-	body.WriteString(st.overlayHint.Render("enter to select \u00b7 esc to cancel \u00b7 \u2191/\u2193 to move"))
+	hint := "enter to select \u00b7 esc to cancel \u00b7 \u2191/\u2193 to move"
+	if o.action == "palette" {
+		hint = "enter to run \u00b7 esc to cancel \u00b7 \u2191/\u2193 to move"
+	}
+	body.WriteString(st.overlayHint.Render(hint))
 }

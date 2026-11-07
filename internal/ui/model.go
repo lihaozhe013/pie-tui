@@ -990,9 +990,9 @@ func (m *Model) renderCompletion() string {
 }
 
 func (m *Model) renderEditor() string {
-	hint := "enter to send · ctrl+j newline · ctrl+o expand · /help"
+	hint := "enter to send · ctrl+j newline · ctrl+p palette · /help"
 	if !m.enterToSend {
-		hint = "enter newline · alt+enter send · ctrl+o expand · /help"
+		hint = "enter newline · alt+enter send · ctrl+p palette · /help"
 	}
 	if m.busy {
 		hint = "enter to queue follow-up · ctrl+s to steer · esc to interrupt"

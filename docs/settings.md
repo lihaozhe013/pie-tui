@@ -1,8 +1,9 @@
 # Settings reference
 
-The panel opens with `/settings` or `ctrl+p`. Every tab reads the same files as
-the Pie web UI, so a change made in either client is visible to the other after
-a reload. Press `/` inside the panel to search every tab and jump to a row.
+The panel opens with `/settings`, or from the `ctrl+p` command palette. Every
+tab reads the same files as the Pie web UI, so a change made in either client
+is visible to the other after a reload. Press `/` inside the panel to search
+every tab and jump to a row.
 
 Shared files are written immediately, with a lock and an atomic replace. The
 TUI never drops JSON keys it does not understand.

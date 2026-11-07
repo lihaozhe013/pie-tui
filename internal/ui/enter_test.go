@@ -8,8 +8,8 @@ import (
 func TestEnterSendsToggleAndComposerKeys(t *testing.T) {
 	t.Setenv("PI_CODING_AGENT_DIR", t.TempDir())
 	model, client := newTestModel(t)
-	model, _ = step(t, model, keyMsg("ctrl+p"))
-	if model.overlay == nil {
+	model.openSettings()
+	if model.overlay == nil || model.overlay.kind != overlaySettings {
 		t.Fatal("settings did not open")
 	}
 	model.overlay = nil

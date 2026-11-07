@@ -25,10 +25,12 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
 - Thinking blocks (collapsible), follow-up queueing, steering, and abort
 - Model picker, thinking-level cycling, session rename/resume/new, compaction,
   HTML export, and token/context statistics
-- A settings panel (`/settings` or `ctrl+p`) with the same tabs as the Pie web
-  UI and a `/` search that jumps across every tab, sharing pi's files:
-  `settings.json`, `models.json`, `AGENTS.md`, and the `pie-*` companion files
-  in the agent directory
+- A command palette (`ctrl+p`) that searches and runs client or pi commands
+  without clearing the composer draft
+- A settings panel (`/settings`) with the same tabs as the Pie web UI and a `/`
+  search that jumps across every tab, sharing pi's files: `settings.json`,
+  `models.json`, `AGENTS.md`, and the `pie-*` companion files in the agent
+  directory
 - Tool presets (`/preset`): the built-in configured, plan, chat-only,
   read-only, default, and full sets, plus custom presets stored in
   `pie-tool-presets.json` and editable from Settings › Tools
@@ -142,7 +144,7 @@ Flags are forwarded to pi where they overlap (`--provider`, `--model`, `--name`,
 | `ctrl+d` | quit when the editor is empty |
 | `ctrl+k` | pick a model |
 | `ctrl+g` | pick a tool preset |
-| `ctrl+p` | open settings |
+| `ctrl+p` | open the command palette |
 | `shift+tab` | cycle the thinking level |
 | `ctrl+t` | show/hide thinking blocks |
 | `ctrl+o` | expand or collapse tool output and diffs |

@@ -478,10 +478,16 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	key := msg.String()
 
+	// The palette stays reachable whatever the composer holds, so it wins over
+	// the completion popup's navigation keys.
+	if key == "ctrl+p" {
+		return m, m.openPalette()
+	}
+
 	// Completion keys win over the editor so the popup behaves predictably.
 	if m.completion.visible {
 		switch key {
-		case "up", "ctrl+p":
+		case "up":
 			m.completion.Move(-1)
 			return m, nil
 		case "down", "ctrl+n":
@@ -556,9 +562,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "ctrl+g":
 		return m, m.openPresetPicker()
-
-	case "ctrl+p":
-		return m, m.openSettings()
 
 	case "ctrl+t":
 		m.showThinking = !m.showThinking
@@ -656,6 +659,17 @@ func (m *Model) submit() tea.Cmd {
 	m.composer.Reset()
 	m.completion.Hide()
 	m.layout()
+
+	return m.dispatchCommand(text)
+}
+
+// dispatchCommand routes a prompt or slash command. The composer owns history
+// and resetting, so callers that did not edit it (the palette) can reuse the
+// same routing and keep the draft.
+func (m *Model) dispatchCommand(text string) tea.Cmd {
+	if text == "" || m.disconnected || m.fatal != "" {
+		return nil
+	}
 
 	if strings.HasPrefix(text, "/") {
 		if cmd, handled := m.runSlash(text); handled {
@@ -860,7 +874,7 @@ func (m *Model) helpItems() []pickerItem {
 		{"ctrl+c", "interrupt, twice to quit"},
 		{"ctrl+k", "pick a model"},
 		{"ctrl+g", "pick a tool preset"},
-		{"ctrl+p", "open settings"},
+		{"ctrl+p", "open the command palette"},
 		{"shift+tab", "cycle thinking level"},
 		{"ctrl+t", "toggle thinking blocks"},
 		{"ctrl+o", "expand tool output and diffs"},
@@ -1442,6 +1456,8 @@ func (m *Model) selectOverlayItem() tea.Cmd {
 				return m.openDirectoryPicker(start)
 			}
 			return m.switchProject(item.Value)
+		case "palette":
+			return m.runPaletteItem(item.Value)
 		case "settings-jump":
 			m.closeOverlay()
 			return m.applySettingsJump(item.Value)

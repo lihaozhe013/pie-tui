@@ -79,6 +79,9 @@ the resume picker.
   command helpers that call pi.
 - `commands.go` — the client-side command table: canonical names, aliases, and
   the alias-to-command index shared by dispatch and completion.
+- `palette.go` — the `ctrl+p` command launcher: client and pi commands ranked
+  into the picker, run through the composer's dispatcher without touching the
+  draft.
 - `activity.go` — the live run status above the composer: phase, running tools,
   retry and compaction labels, the elapsed clock, the token estimate and t/s
   rate of the block being written, and the pulsing marker.

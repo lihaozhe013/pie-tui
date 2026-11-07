@@ -34,7 +34,7 @@ type composer struct {
 
 func newComposer(st styles) *composer {
 	ta := textarea.New()
-	ta.Placeholder = "Ask pi anything…  (/help for commands)"
+	ta.Placeholder = "Ask pi anything…  (ctrl+p for commands · /help)"
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 0
 	// MaxHeight also limits the number of logical lines; leave it unlimited and
