@@ -190,6 +190,28 @@ func TestTranscriptStickBottom(t *testing.T) {
 	}
 }
 
+func TestTranscriptFollowsOnlyWhenPinned(t *testing.T) {
+	t.Parallel()
+
+	st := newStyles(defaultTheme())
+	transcript := newTranscript(st)
+	transcript.SetSize(40, 5)
+
+	for i := 0; i < 10; i++ {
+		transcript.Add(newBlock(blockNotice, "line"))
+	}
+	_ = transcript.View()
+
+	// Scrolling up must survive new blocks.
+	transcript.vp.SetYOffset(1)
+	transcript.stickBottom = false
+	transcript.Add(newBlock(blockNotice, "late"))
+	_ = transcript.View()
+	if transcript.vp.YOffset != 1 {
+		t.Fatalf("offset moved to %d", transcript.vp.YOffset)
+	}
+}
+
 func TestRenderToolBlockRespectsExpansion(t *testing.T) {
 	t.Parallel()
 

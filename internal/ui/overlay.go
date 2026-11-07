@@ -74,7 +74,7 @@ func newSelectOverlay(request *rpc.ExtensionUIRequestEvent) *overlay {
 	o := newPickerOverlay("extension-select", request.Title, items)
 	o.kind = overlaySelect
 	o.requestID = request.ID
-	o.message = request.Message
+	o.message = withTimeout(request.Message, request.Timeout)
 	o.filter.Blur()
 	return o
 }
@@ -84,7 +84,7 @@ func newConfirmOverlay(request *rpc.ExtensionUIRequestEvent) *overlay {
 		kind:      overlayConfirm,
 		action:    "extension-confirm",
 		title:     request.Title,
-		message:   request.Message,
+		message:   withTimeout(request.Message, request.Timeout),
 		requestID: request.ID,
 	}
 }
@@ -99,7 +99,7 @@ func newInputOverlay(request *rpc.ExtensionUIRequestEvent) *overlay {
 		kind:      overlayInput,
 		action:    "extension-input",
 		title:     request.Title,
-		message:   request.Message,
+		message:   withTimeout(request.Message, request.Timeout),
 		requestID: request.ID,
 		filter:    input,
 	}
@@ -117,10 +117,22 @@ func newEditorOverlay(request *rpc.ExtensionUIRequestEvent) *overlay {
 		kind:      overlayEditor,
 		action:    "extension-editor",
 		title:     request.Title,
-		message:   request.Message,
+		message:   withTimeout(request.Message, request.Timeout),
 		requestID: request.ID,
 		editor:    editor,
 	}
+}
+
+// withTimeout appends the auto-resolve deadline pi reported, if any.
+func withTimeout(message string, timeoutMs int) string {
+	if timeoutMs <= 0 {
+		return message
+	}
+	hint := fmt.Sprintf("expires in %ds", timeoutMs/1000)
+	if message == "" {
+		return hint
+	}
+	return message + "\n\n" + hint
 }
 
 func (o *overlay) refilter() {

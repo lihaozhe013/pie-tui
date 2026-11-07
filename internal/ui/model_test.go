@@ -194,6 +194,31 @@ func newTestModel(t *testing.T) (*Model, *fakeClient) {
 	return model, client
 }
 
+func TestModelFrameMatchesTerminalHeight(t *testing.T) {
+	t.Parallel()
+
+	model, _ := newTestModel(t)
+	for _, height := range []int{12, 24, 40} {
+		model, _ = step(t, model, tea.WindowSizeMsg{Width: 80, Height: height})
+		if got := len(strings.Split(model.View(), "\n")); got != height {
+			t.Fatalf("height %d: view has %d lines", height, got)
+		}
+	}
+
+	// The slash popup and modal overlays must not overflow the frame either.
+	model.composer.SetText("/")
+	model.completion.Refresh(model.composer.Value())
+	model.layout()
+	if got := len(strings.Split(model.View(), "\n")); got != 40 {
+		t.Fatalf("with completion: view has %d lines", got)
+	}
+
+	model.openOverlay(newPickerOverlay("help", "Help", model.helpItems()))
+	if got := len(strings.Split(model.View(), "\n")); got != 40 {
+		t.Fatalf("with overlay: view has %d lines", got)
+	}
+}
+
 func TestModelRendersHeader(t *testing.T) {
 	t.Parallel()
 

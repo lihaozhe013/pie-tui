@@ -230,7 +230,7 @@ func (m *Model) startTool(event *rpc.ToolExecutionStartEvent) {
 			block.meta += " (truncated)"
 		}
 		m.transcript.Add(block)
-		m.transcript.ScrollToBottom()
+		m.followOutput()
 		return
 	}
 
@@ -242,7 +242,7 @@ func (m *Model) startTool(event *rpc.ToolExecutionStartEvent) {
 	block.collapsed = !m.expanded
 	block.streaming = true
 	m.transcript.Add(block)
-	m.transcript.ScrollToBottom()
+	m.followOutput()
 }
 
 func (m *Model) updateTool(event *rpc.ToolExecutionUpdateEvent) {
@@ -538,7 +538,7 @@ func (m *Model) submit() tea.Cmd {
 	}
 
 	m.transcript.Add(newBlock(blockUser, text))
-	m.transcript.ScrollToBottom()
+	m.followOutput()
 	return m.sendPrompt(text)
 }
 
@@ -1090,7 +1090,15 @@ func (m *Model) answerInput(value string) tea.Cmd {
 // addNotice appends an informational block.
 func (m *Model) addNotice(text string) {
 	m.transcript.Add(newBlock(blockNotice, text))
-	m.transcript.ScrollToBottom()
+	m.followOutput()
+}
+
+// followOutput scrolls to the newest line only when the user is already at the
+// bottom, so tool output never yanks the transcript away mid-scroll.
+func (m *Model) followOutput() {
+	if m.transcript.stickBottom {
+		m.transcript.ScrollToBottom()
+	}
 }
 
 // addError appends an error block and keeps it visible.
