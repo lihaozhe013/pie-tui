@@ -39,3 +39,19 @@ func TestStatsPanelShowsCounters(t *testing.T) {
 		t.Fatalf("cost = %q", rows["stats-cost"])
 	}
 }
+
+func TestContextUsageAppliesThePieCap(t *testing.T) {
+	t.Setenv("PI_CODING_AGENT_DIR", t.TempDir())
+	m := New(newFakeClient(), Options{})
+	m.stats.ContextUsage = &rpc.ContextUsage{Tokens: 175000, ContextWindow: 1000000, Percent: 17.5}
+	usage := m.contextUsage()
+	if usage == nil || usage.ContextWindow != 350000 {
+		t.Fatalf("usage = %+v", usage)
+	}
+	if usage.Percent < 49.9 || usage.Percent > 50.1 {
+		t.Fatalf("percent = %v", usage.Percent)
+	}
+	if m.stats.ContextUsage.ContextWindow != 1000000 {
+		t.Fatal("native usage was modified")
+	}
+}

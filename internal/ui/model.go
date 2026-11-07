@@ -894,7 +894,7 @@ func (m *Model) renderStatus() string {
 	var right string
 	if m.stats.Tokens.Total > 0 || m.stats.ContextUsage != nil {
 		right = formatTokens(m.stats.Tokens.Total)
-		if usage := m.stats.ContextUsage; usage != nil && usage.ContextWindow > 0 {
+		if usage := m.contextUsage(); usage != nil && usage.ContextWindow > 0 {
 			right += fmt.Sprintf(" · %.0f%% ctx", usage.Percent)
 		}
 		right = m.styles.muted.Render(right)

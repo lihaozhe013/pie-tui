@@ -181,7 +181,8 @@ with the same name, that name is forwarded instead of being treated as an alias.
 
 ## Design notes
 
-See [docs/architecture.md](docs/architecture.md) for the process boundary, the
+See [docs/settings.md](docs/settings.md) for a row-by-row settings reference and
+[docs/architecture.md](docs/architecture.md) for the process boundary, the
 protocol invariants (LF-only framing, permissive parsing, `agent_settled` as the
 end of a run), the rendering budget, and the shutdown escalation.
 

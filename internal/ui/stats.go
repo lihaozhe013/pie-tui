@@ -4,7 +4,26 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/lihaozhe/pie-tui/internal/rpc"
 )
+
+// contextUsage applies pie-model-settings.json's cap to pi's reported window,
+// matching the meter Pie draws. A cap never enlarges a model's native window.
+func (m *Model) contextUsage() *rpc.ContextUsage {
+	usage := m.stats.ContextUsage
+	if usage == nil {
+		return nil
+	}
+	capped := *usage
+	if m.modelSettings != nil {
+		if limit, applies := m.modelSettings.ContextWindowLimit(); applies && limit > 0 && limit < capped.ContextWindow {
+			capped.ContextWindow = limit
+			capped.Percent = 100 * float64(capped.Tokens) / float64(limit)
+		}
+	}
+	return &capped
+}
 
 // openStats shows the session counters and refreshes them while the panel is
 // open. The same numbers power the status bar's token estimate.
@@ -16,7 +35,7 @@ func (m *Model) openStats() tea.Cmd {
 func (m *Model) showStatsPanel() {
 	tab := settingsTab{ID: "stats", Label: "Statistics"}
 	stats := m.stats
-	usage := stats.ContextUsage
+	usage := m.contextUsage()
 	model := "no model"
 	if m.state.Model != nil {
 		model = m.state.Model.Label()
