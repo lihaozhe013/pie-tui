@@ -5,8 +5,9 @@ web UI (`/Users/lihaozhe/dev/pie`), excluding the task workspace and drag-and-dr
 attachments. It records the assessment, the shared configuration contract, the
 runtime gaps and their agreed solutions, and a phased implementation order.
 
-Status: approved direction, not yet implemented. The bridge-extension approach in
-section 6.4 was chosen by the user.
+Status: implemented. Every phase below landed; `docs/settings.md` is the
+delivered settings reference and `README.md` lists the final commands. The
+bridge-extension approach in section 6.4 is what shipped.
 
 ## 1. Goal
 
