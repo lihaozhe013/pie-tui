@@ -1453,6 +1453,9 @@ func (m *Model) answerInput(value string) tea.Cmd {
 			m.settingsPanel.notice = "instructions saved"
 		}
 		m.openSettingsOverlay()
+		if m.bridgeReady {
+			return m.reloadPi()
+		}
 		return nil
 	}
 	return func() tea.Msg {

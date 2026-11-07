@@ -483,6 +483,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case presetAppliedMsg:
+		if msg.err != nil {
+			m.addError("preset: " + msg.err.Error())
+		} else {
+			m.setToast("preset: " + msg.selection)
+		}
+		return m, nil
+
+	case reloadMsg:
+		if msg.err != nil {
+			m.addError("reload: " + msg.err.Error())
+			return m, nil
+		}
+		m.reloadConfig()
+		m.setToast("pi reloaded settings and instructions")
+		if m.overlay != nil && m.overlay.action == "settings" {
+			m.openSettingsOverlay()
+		}
+		return m, nil
+
 	case providerCheckMsg:
 		m.setToast(providerCheckSummary(msg))
 		return m, nil

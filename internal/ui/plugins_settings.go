@@ -169,6 +169,7 @@ func (m *Model) openPackageDetail(entry config.Package, scope string) tea.Cmd {
 
 	tab := settingsTab{ID: "package", Label: "Package", Note: entry.Source}
 	tab.Rows = []settingsRow{
+		{ID: "package-reload-note", Label: "Applies", Kind: settingsInfo, Current: func() string { return "after a reload or restart" }},
 		{ID: "package-source", Label: "Source", Kind: settingsInfo, Current: func() string { return entry.Source }},
 		{ID: "package-scope", Label: "Scope", Kind: settingsInfo, Current: func() string { return scope }},
 		{
@@ -179,6 +180,15 @@ func (m *Model) openPackageDetail(entry config.Package, scope string) tea.Cmd {
 			Bool:  func() bool { return !disabled },
 			SetBool: func(on bool) error {
 				return setDisabled(!on)
+			},
+		},
+		{
+			ID:    "package-reload",
+			Label: "Reload now",
+			Help:  "Runs /pie-reload so pi rereads settings without restarting.",
+			Kind:  settingsAction,
+			Run: func(m *Model, s *settingsState) tea.Cmd {
+				return m.reloadPi()
 			},
 		},
 		{

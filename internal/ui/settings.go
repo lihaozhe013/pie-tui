@@ -728,6 +728,15 @@ func (m *Model) generalSettingsTab() settingsTab {
 		})
 	}
 
+	tab.Rows = append(tab.Rows, settingsRow{
+		ID:    "reload-pi",
+		Label: "Reload pi",
+		Help:  "Rereads settings.json, AGENTS.md, and instructions through the bridge without restarting the session.",
+		Kind:  settingsAction,
+		Run: func(m *Model, s *settingsState) tea.Cmd {
+			return m.reloadPi()
+		},
+	})
 	return tab
 }
 
