@@ -15,6 +15,10 @@ type reloadMsg struct{ err error }
 // reloadPi asks the bridge to reload settings, instructions, and extension
 // state without restarting the child. Without the bridge a restart is needed.
 func (m *Model) reloadPi() tea.Cmd {
+	if m.busy {
+		m.setToast("wait for the current turn before reloading pi")
+		return nil
+	}
 	if !m.bridgeReady {
 		m.setToast("bridge extension unavailable; restart pie-tui to reload")
 		return nil
