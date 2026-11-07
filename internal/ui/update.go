@@ -599,7 +599,10 @@ func (m *Model) submit() tea.Cmd {
 		}
 	}
 
-	m.transcript.Add(newBlock(blockUser, text))
+	userBlock := newBlock(blockUser, text)
+	m.transcript.Add(userBlock)
+	m.pendingPrompt = userBlock
+	m.pendingPromptText = text
 	m.followOutput()
 	return m.sendPrompt(text)
 }
@@ -905,9 +908,22 @@ func (m *Model) applyResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 		}
 		switch payload.Disposition {
 		case "queued":
+			m.pendingPrompt = nil
 			m.setToast("message queued")
 		case "handled":
-			m.setToast("handled by pi")
+			// An extension command is not conversation: take back the block the
+			// composer optimistically added.
+			if m.pendingPrompt != nil {
+				m.removeBlock(m.pendingPrompt)
+				m.pendingPrompt = nil
+			}
+			if !strings.HasPrefix(m.pendingPromptText, "/pie-") {
+				m.setToast("handled by pi")
+			}
+			m.pendingPromptText = ""
+		default:
+			m.pendingPrompt = nil
+			m.pendingPromptText = ""
 		}
 
 	case "model":

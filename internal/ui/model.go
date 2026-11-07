@@ -157,6 +157,15 @@ type Model struct {
 	configErr          error
 	settingsPanel      *settingsState
 	pendingSettingsRow *settingsRow
+
+	// bridgeReady reports whether pi loaded pie-tui's bridge extension, which
+	// provides hot tool switching, work modes, and reload.
+	bridgeReady bool
+
+	// pendingPrompt is the optimistic user block for the prompt in flight, so
+	// a command handled by an extension can take it back.
+	pendingPrompt     *block
+	pendingPromptText string
 }
 
 // New builds the model around a connected client.
@@ -400,6 +409,7 @@ func (m *Model) applyHandshake(msg handshakeMsg) (tea.Model, tea.Cmd) {
 	m.levels = msg.levels
 	m.commands = msg.commands
 	m.stats = msg.stats
+	m.bridgeReady = m.hasPiCommand("pie-tools")
 	m.completion.SetItems(m.commandItems())
 	m.loadHistory(msg.history)
 
@@ -417,6 +427,16 @@ func (m *Model) applyHandshake(msg handshakeMsg) (tea.Model, tea.Cmd) {
 // commandItems merges built-ins with the commands pi reported. A built-in alias
 // that pi also uses is dropped: runSlash forwards that name to pi, so listing it
 // as a client-side command would be a lie.
+// hasPiCommand reports whether pi advertised an extension command.
+func (m *Model) hasPiCommand(name string) bool {
+	for _, command := range m.commands {
+		if command.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Model) commandItems() []completionItem {
 	items := make([]completionItem, 0, len(builtinCommandTable)*2)
 	seen := make(map[string]bool, len(builtinCommandTable)*2)

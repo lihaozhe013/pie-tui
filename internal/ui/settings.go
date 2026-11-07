@@ -594,6 +594,18 @@ func (m *Model) generalSettingsTab() settingsTab {
 			Kind:    settingsInfo,
 			Current: func() string { return m.paths.Settings() },
 		})
+		tab.Rows = append(tab.Rows, settingsRow{
+			ID:    "bridge",
+			Label: "Bridge extension",
+			Help:  "Loaded from the pie-tui state directory; enables hot tool switching and reload.",
+			Kind:  settingsInfo,
+			Current: func() string {
+				if m.bridgeReady {
+					return "ready"
+				}
+				return "unavailable"
+			},
+		})
 	}
 
 	if m.prefs != nil {

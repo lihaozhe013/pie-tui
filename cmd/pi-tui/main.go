@@ -20,6 +20,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/lihaozhe/pie-tui/internal/bridge"
 	"github.com/lihaozhe/pie-tui/internal/rpc"
 	"github.com/lihaozhe/pie-tui/internal/ui"
 )
@@ -87,9 +88,19 @@ func run(args []string, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer stop()
 
+	piCommand := piArgs(cfg)
+	if state, stateErr := stateDir(); stateErr == nil {
+		if extension, ensureErr := bridge.Ensure(state); ensureErr == nil {
+			piCommand = append(piCommand, "-e", extension)
+			logger.logf("bridge extension: %s", extension)
+		} else {
+			logger.logf("bridge extension unavailable: %v", ensureErr)
+		}
+	}
+
 	client, err := rpc.Start(ctx, rpc.Options{
 		Bin:    piBinary,
-		Args:   piArgs(cfg),
+		Args:   piCommand,
 		Dir:    cwd,
 		Stderr: nil,
 		Logf:   logger.logf,
@@ -286,7 +297,7 @@ func newLogger(enabled bool, stderr io.Writer) (*debugLogger, func()) {
 	return logger, func() { _ = file.Close() }
 }
 
-func logPath() (string, error) {
+func stateDir() (string, error) {
 	base := os.Getenv("XDG_STATE_HOME")
 	if base == "" {
 		home, err := os.UserHomeDir()
@@ -295,5 +306,13 @@ func logPath() (string, error) {
 		}
 		base = filepath.Join(home, ".local", "state")
 	}
-	return filepath.Join(base, "pie-tui", "pie-tui.log"), nil
+	return filepath.Join(base, "pie-tui"), nil
+}
+
+func logPath() (string, error) {
+	dir, err := stateDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "pie-tui.log"), nil
 }

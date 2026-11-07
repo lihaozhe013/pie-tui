@@ -30,6 +30,9 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   `pie-*` companion files in the agent directory
 - Pie's 18 color themes, applied instantly and saved to the terminal-only
   preferences file
+- A bundled bridge extension (loaded with `-e`) that adds hot tool switching,
+  Plan mode, and reload over RPC, using the same `pie:*` session entries as the
+  web UI
 - Extension UI support: confirm/select/input/editor dialogs, notifications,
   status entries, window titles, and editor prefills
 - Survives upgrades: unknown protocol records are ignored rather than fatal
