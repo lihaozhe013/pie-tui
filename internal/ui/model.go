@@ -393,6 +393,12 @@ func (m *Model) layout() {
 	}
 	m.composer.SetWidth(m.width - 4)
 
+	// On a very short terminal, shrink the editor instead of letting the frame
+	// clip its bottom border.
+	if limit := m.height - 5; limit >= 1 && m.composer.Height() > limit {
+		m.composer.ta.SetHeight(limit)
+	}
+
 	editor := m.composer.Height() + 3
 	completion := 0
 	if m.completion.visible && m.overlay == nil {
