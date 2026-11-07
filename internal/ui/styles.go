@@ -54,6 +54,14 @@ func defaultTheme() theme {
 	}
 }
 
+// editorRuleBorder frames the composer with a top and bottom rule only, the
+// way Claude Code draws its prompt: the text sits between two lines instead of
+// inside a closed box.
+var editorRuleBorder = lipgloss.Border{
+	Top:    "─",
+	Bottom: "─",
+}
+
 // styles holds prebuilt Lip Gloss styles for one theme.
 type styles struct {
 	theme theme
@@ -129,8 +137,12 @@ func newStyles(t theme) styles {
 		accent:          lipgloss.NewStyle().Foreground(t.Accent),
 
 		editorBox: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(t.Border).
+			Border(editorRuleBorder).
+			BorderTop(true).
+			BorderBottom(true).
+			BorderLeft(false).
+			BorderRight(false).
+			BorderForeground(t.Base).
 			Padding(0, 1),
 		editorHint:        lipgloss.NewStyle().Foreground(t.Editor),
 		editorText:        lipgloss.NewStyle().Foreground(t.Base),

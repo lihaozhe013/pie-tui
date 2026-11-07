@@ -1023,7 +1023,9 @@ func (m *Model) layout() {
 		return
 	}
 	width := m.frameWidth()
-	m.composer.SetWidth(width - 4)
+	// The composer only carries a top and bottom rule now, so its content can
+	// use the columns the side borders used to occupy.
+	m.composer.SetWidth(width - 2)
 
 	// On a very short terminal, shrink the editor instead of letting the frame
 	// clip its bottom border.
@@ -1269,7 +1271,7 @@ func (m *Model) renderEditor() string {
 		hint = "plan mode · writes blocked · " + hint
 	}
 
-	style := m.styles.editorBox.Copy().Width(maxInt(20, m.frameWidth()-2))
+	style := m.styles.editorBox.Copy().Width(maxInt(20, m.frameWidth()))
 	content := m.composer.View()
 	box := style.Render(content)
 	return box + "\n" + m.styles.editorHint.Render(truncateLine(hint, m.frameWidth()))
