@@ -151,7 +151,7 @@ func (m *Model) switchProject(dir string) tea.Cmd {
 		m.setToast("not a directory: " + absolute)
 		return nil
 	}
-	if filepath.Clean(absolute) == filepath.Clean(m.opts.CWD) {
+	if sameDirectory(absolute, m.opts.CWD) {
 		m.setToast("already in " + shortenPath(absolute))
 		return nil
 	}
@@ -214,6 +214,20 @@ func (m *Model) applyProjectSwitch(msg projectSwitchedMsg) (tea.Model, tea.Cmd) 
 	m.pendingNotice = "new session in " + msg.dir
 	m.layout()
 	return m, tea.Batch(m.waitEvent(), m.handshake())
+}
+
+// sameDirectory resolves symlinks so /tmp and /private/tmp compare equal.
+func sameDirectory(left, right string) bool {
+	if left == "" || right == "" {
+		return filepath.Clean(left) == filepath.Clean(right)
+	}
+	resolve := func(path string) string {
+		if resolved, err := filepath.EvalSymlinks(path); err == nil {
+			return filepath.Clean(resolved)
+		}
+		return filepath.Clean(path)
+	}
+	return resolve(left) == resolve(right)
 }
 
 func expandHome(path string) string {

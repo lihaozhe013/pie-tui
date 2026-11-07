@@ -110,3 +110,21 @@ func TestDirectoryPickerListsSubdirectories(t *testing.T) {
 		t.Fatalf("browseDir = %q", m.browseDir)
 	}
 }
+
+func TestSameDirectoryResolvesSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "real")
+	link := filepath.Join(dir, "link")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	if !sameDirectory(real, link) {
+		t.Fatal("symlinked directories differ")
+	}
+	if sameDirectory(real, filepath.Join(dir, "other")) {
+		t.Fatal("different directories matched")
+	}
+}
