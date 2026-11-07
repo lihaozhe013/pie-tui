@@ -1,0 +1,582 @@
+// Package ui is the Bubble Tea front end of pie-tui. It renders events produced
+// by the rpc client and turns keyboard input into JSONL commands; it holds no
+// conversation logic of its own.
+package ui
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/lihaozhe/pie-tui/internal/rpc"
+	"github.com/lihaozhe/pie-tui/internal/session"
+)
+
+// Client is the subset of rpc.Client the model depends on. Tests substitute a
+// fake so key handling can be exercised without a subprocess.
+type Client interface {
+	Do(ctx context.Context, command rpc.Command) (*rpc.Response, error)
+	DoOK(ctx context.Context, command rpc.Command) (*rpc.Response, error)
+	Send(command rpc.Command) error
+	Events() <-chan rpc.Event
+	Done() <-chan struct{}
+	Err() error
+	StderrTail() []string
+}
+
+// Options configures the model.
+type Options struct {
+	// SessionDir overrides where the resume picker looks for sessions.
+	SessionDir string
+	// CWD is the working directory shown for sessions without a recorded one.
+	CWD string
+	// Version is displayed in the help overlay.
+	Version string
+}
+
+// Timing constants for the event loop.
+const (
+	// renderInterval throttles markdown re-rendering while a message streams.
+	renderInterval = 40 * time.Millisecond
+	// tickInterval drives the spinner and pending stream renders.
+	tickInterval = 40 * time.Millisecond
+	// toastDuration is how long extension notifications stay visible.
+	toastDuration = 5 * time.Second
+	// commandTimeout bounds a single RPC command issued by the UI.
+	commandTimeout = 60 * time.Second
+)
+
+// Messages produced by commands.
+type (
+	eventMsg struct{ event rpc.Event }
+
+	closedMsg struct{ err error }
+
+	tickMsg struct{}
+
+	handshakeMsg struct {
+		state    rpc.State
+		models   []rpc.ModelInfo
+		levels   []string
+		commands []rpc.CommandInfo
+		history  []rpc.Message
+		err      error
+	}
+
+	responseMsg struct {
+		action string
+		resp   *rpc.Response
+		err    error
+	}
+
+	abortMsg struct {
+		restored []string
+		err      error
+	}
+
+	sessionListMsg struct {
+		entries []session.Entry
+		err     error
+	}
+
+	historyMsg struct {
+		messages []rpc.Message
+		err      error
+	}
+
+	statsMsg struct{ stats rpc.SessionStats }
+
+	stateMsg struct{ state rpc.State }
+)
+
+// streamState accumulates one streaming assistant response.
+type streamState struct {
+	acc       rpc.StreamAccumulator
+	assistant *block
+	thinking  *block
+	dirty     bool
+}
+
+// Model is the top-level Bubble Tea model.
+type Model struct {
+	client Client
+	styles styles
+	opts   Options
+
+	transcript *transcript
+	composer   *composer
+	completion *completion
+	overlay    *overlay
+
+	width  int
+	height int
+	body   int
+
+	state    rpc.State
+	models   []rpc.ModelInfo
+	levels   []string
+	commands []rpc.CommandInfo
+	stats    rpc.SessionStats
+	queue    rpc.QueueUpdateEvent
+
+	statuses     map[string]string
+	toast        string
+	toastUntil   time.Time
+	widget       []string
+	showThinking bool
+	expanded     bool
+
+	busy         bool
+	frame        int
+	stream       streamState
+	spinning     bool
+	ticking      bool
+	fatal        string
+	disconnected bool
+	ready        bool
+	quitting     bool
+	ctrlCAt      time.Time
+
+	dialogs []*rpc.ExtensionUIRequestEvent
+}
+
+// New builds the model around a connected client.
+func New(client Client, opts Options) *Model {
+	st := newStyles(defaultTheme())
+	m := &Model{
+		client:     client,
+		styles:     st,
+		opts:       opts,
+		transcript: newTranscript(st),
+		composer:   newComposer(st),
+		completion: &completion{},
+		statuses:   map[string]string{},
+	}
+	m.completion.SetItems(builtinCommands())
+	return m
+}
+
+// Init starts the event pump and the startup handshake.
+func (m *Model) Init() tea.Cmd {
+	return tea.Batch(m.waitEvent(), m.handshake())
+}
+
+func (m *Model) waitEvent() tea.Cmd {
+	events := m.client.Events()
+	return func() tea.Msg {
+		event, ok := <-events
+		if !ok {
+			return closedMsg{}
+		}
+		return eventMsg{event: event}
+	}
+}
+
+func (m *Model) handshake() tea.Cmd {
+	client := m.client
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		msg := handshakeMsg{}
+		response, err := client.DoOK(ctx, rpc.GetState())
+		if err != nil {
+			msg.err = err
+			return msg
+		}
+		msg.state, _ = rpc.DecodeTyped[rpc.State](response)
+
+		if response, err := client.DoOK(ctx, rpc.GetAvailableModels()); err == nil {
+			payload, _ := rpc.DecodeTyped[rpc.ModelsPayload](response)
+			msg.models = payload.Models
+		}
+		if response, err := client.DoOK(ctx, rpc.GetAvailableThinkingLevels()); err == nil {
+			payload, _ := rpc.DecodeTyped[rpc.ThinkingLevelsPayload](response)
+			msg.levels = payload.Levels
+		}
+		if response, err := client.DoOK(ctx, rpc.GetCommands()); err == nil {
+			payload, _ := rpc.DecodeTyped[rpc.CommandsPayload](response)
+			msg.commands = payload.Commands
+		}
+		if msg.state.MessageCount > 0 {
+			if response, err := client.DoOK(ctx, rpc.GetMessages()); err == nil {
+				payload, _ := rpc.DecodeTyped[rpc.MessagesPayload](response)
+				msg.history = payload.Messages
+			}
+		}
+		return msg
+	}
+}
+
+// Update implements tea.Model.
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
+		m.ready = true
+		m.layout()
+		return m, nil
+
+	case handshakeMsg:
+		return m.applyHandshake(msg)
+
+	case eventMsg:
+		return m.handleEvent(msg.event)
+
+	case closedMsg:
+		m.disconnected = true
+		m.busy = false
+		tail := strings.Join(m.client.StderrTail(), "\n")
+		detail := "pi exited"
+		if err := m.client.Err(); err != nil {
+			detail += ": " + err.Error()
+		}
+		if tail != "" {
+			detail += "\n" + tail
+		}
+		m.addError(detail)
+		return m, nil
+
+	case stateMsg:
+		m.state = msg.state
+		return m, nil
+
+	case tickMsg:
+		m.ticking = false
+		m.frame++
+		if m.stream.dirty {
+			m.stream.dirty = false
+			m.transcript.MarkDirty()
+		}
+		if m.busy {
+			return m, m.scheduleTick()
+		}
+		return m, nil
+
+	case responseMsg:
+		return m.applyResponse(msg)
+
+	case abortMsg:
+		if len(msg.restored) > 0 {
+			m.composer.SetText(strings.Join(msg.restored, "\n"))
+		}
+		if msg.err != nil {
+			m.addError(msg.err.Error())
+		}
+		return m, nil
+
+	case statsMsg:
+		m.stats = msg.stats
+		return m, nil
+
+	case sessionListMsg:
+		if msg.err != nil {
+			m.addError("scan sessions: " + msg.err.Error())
+			return m, nil
+		}
+		if len(msg.entries) == 0 {
+			m.setToast("no sessions found")
+			return m, nil
+		}
+		items := make([]pickerItem, 0, len(msg.entries))
+		for _, entry := range msg.entries {
+			items = append(items, pickerItem{
+				Value:  entry.Path,
+				Label:  entry.Label(),
+				Detail: fmt.Sprintf("%s · %s", shortenPath(entry.CWD), humanTime(entry.Modified)),
+			})
+		}
+		m.openOverlay(newPickerOverlay("session", "Resume session", items))
+		return m, nil
+
+	case historyMsg:
+		if msg.err != nil {
+			m.addError("load messages: " + msg.err.Error())
+			return m, nil
+		}
+		m.loadHistory(msg.messages)
+		return m, nil
+
+	case tea.KeyMsg:
+		return m.handleKey(msg)
+
+	case tea.MouseMsg:
+		return m, m.transcript.Update(msg)
+	}
+
+	return m, nil
+}
+
+func (m *Model) applyHandshake(msg handshakeMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.fatal = "could not talk to pi: " + msg.err.Error()
+		m.addError(m.fatal)
+		return m, tea.Quit
+	}
+
+	m.state = msg.state
+	m.models = msg.models
+	m.levels = msg.levels
+	m.commands = msg.commands
+	m.completion.SetItems(m.commandItems())
+	m.loadHistory(msg.history)
+
+	if m.state.IsStreaming {
+		// Attach to a run that was already in flight when we started.
+		m.busy = true
+		m.transcript.Add(newBlock(blockNotice, "attached to a running turn"))
+		return m, m.scheduleTick()
+	}
+	return m, nil
+}
+
+// commandItems merges built-ins with the commands pi reported.
+func (m *Model) commandItems() []completionItem {
+	items := builtinCommands()
+	seen := make(map[string]bool, len(items))
+	for _, item := range items {
+		seen[item.Value] = true
+	}
+	for _, command := range m.commands {
+		value := "/" + command.Name
+		if seen[value] {
+			continue
+		}
+		seen[value] = true
+		detail := command.Description
+		if detail == "" {
+			detail = command.Source
+		} else if command.Source != "" {
+			detail += " (" + command.Source + ")"
+		}
+		items = append(items, completionItem{Value: value, Detail: detail, Kind: command.Source})
+	}
+	return items
+}
+
+// layout recomputes pane sizes from the terminal size and editor height.
+//
+// The frame is exactly height lines: 1 header + body + 1 status + editor box +
+// hint. Any mismatch would scroll the alternate screen and hide the header.
+func (m *Model) layout() {
+	if m.width == 0 || m.height == 0 {
+		return
+	}
+	m.composer.SetWidth(m.width - 4)
+
+	editor := m.composer.Height() + 3
+	completion := 0
+	if m.completion.visible && m.overlay == nil {
+		completion = minInt(len(m.completion.filtered), 6) + 2
+	}
+	body := m.height - 2 - editor - completion
+	if body < 1 {
+		body = 1
+	}
+	m.body = body
+	m.transcript.SetSize(m.width, body)
+	if m.overlay != nil {
+		m.overlay.Resize(m.width)
+	}
+}
+
+func (m *Model) scheduleTick() tea.Cmd {
+	if m.ticking {
+		return nil
+	}
+	m.ticking = true
+	return tea.Tick(tickInterval, func(time.Time) tea.Msg { return tickMsg{} })
+}
+
+// View implements tea.Model.
+func (m *Model) View() string {
+	if !m.ready {
+		return m.styles.muted.Render("starting pie-tui…")
+	}
+
+	lines := make([]string, 0, m.height)
+	lines = append(lines, m.renderHeader())
+	lines = append(lines, m.bodyLines()...)
+
+	if len(lines) < m.height {
+		lines = append(lines, m.renderStatus())
+	}
+	if m.completion.visible && m.overlay == nil && len(lines) < m.height {
+		lines = append(lines, strings.Split(m.renderCompletion(), "\n")...)
+	}
+	if len(lines) < m.height {
+		lines = append(lines, strings.Split(m.renderEditor(), "\n")...)
+	}
+
+	if len(lines) > m.height {
+		lines = lines[:m.height]
+	}
+	for len(lines) < m.height {
+		lines = append(lines, "")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// bodyLines renders exactly the transcript area height.
+func (m *Model) bodyLines() []string {
+	if m.overlay != nil {
+		box := strings.Split(m.overlay.View(m.styles), "\n")
+		top := (m.body - len(box)) / 2
+		if top < 0 {
+			top = 0
+		}
+		lines := make([]string, 0, m.body)
+		for i := 0; i < top && len(lines) < m.body; i++ {
+			lines = append(lines, "")
+		}
+		for _, line := range box {
+			if len(lines) >= m.body {
+				break
+			}
+			lines = append(lines, line)
+		}
+		for len(lines) < m.body {
+			lines = append(lines, "")
+		}
+		return lines
+	}
+
+	lines := strings.Split(m.transcript.View(), "\n")
+	if len(lines) > m.body {
+		lines = lines[:m.body]
+	}
+	for len(lines) < m.body {
+		lines = append(lines, "")
+	}
+	return lines
+}
+
+func (m *Model) renderHeader() string {
+	title := m.styles.header.Render("pie-tui")
+	segments := []string{title}
+
+	model := "no model"
+	if m.state.Model != nil {
+		model = m.state.Model.Label()
+	}
+	segments = append(segments, m.styles.muted.Render(model))
+	if m.state.ThinkingLevel != "" {
+		segments = append(segments, m.styles.muted.Render("think:"+m.state.ThinkingLevel))
+	}
+	if m.state.SessionName != "" {
+		segments = append(segments, m.styles.muted.Render(m.state.SessionName))
+	}
+	if m.busy {
+		spinner := []string{"·", "•", "●", "•"}
+		segments = append(segments, m.styles.accent.Render(spinner[m.frame%len(spinner)]))
+	}
+
+	return truncateLine(strings.Join(segments, m.styles.muted.Render(" · ")), m.width)
+}
+
+func (m *Model) renderStatus() string {
+	var left []string
+
+	if m.fatal != "" {
+		left = append(left, m.styles.errorText.Render(m.fatal))
+	} else if m.disconnected {
+		left = append(left, m.styles.errorText.Render("pi disconnected · ctrl+c to exit"))
+	}
+
+	if m.busy && !m.disconnected {
+		left = append(left, m.styles.muted.Render("working… esc to interrupt · ctrl+s to steer"))
+	}
+
+	if queued := len(m.queue.Steering) + len(m.queue.FollowUp); queued > 0 {
+		left = append(left, m.styles.notice.Render(fmt.Sprintf("%d queued", queued)))
+	}
+
+	keys := make([]string, 0, len(m.statuses))
+	for key := range m.statuses {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		left = append(left, m.styles.muted.Render(m.statuses[key]))
+	}
+	for _, line := range m.widget {
+		left = append(left, m.styles.muted.Render(line))
+	}
+
+	if m.toast != "" && time.Now().Before(m.toastUntil) {
+		left = append(left, m.styles.notice.Render(m.toast))
+	}
+
+	var right string
+	if m.stats.Tokens.Total > 0 || m.stats.ContextUsage != nil {
+		right = formatTokens(m.stats.Tokens.Total)
+		if usage := m.stats.ContextUsage; usage != nil && usage.ContextWindow > 0 {
+			right += fmt.Sprintf(" · %.0f%% ctx", usage.Percent)
+		}
+		right = m.styles.muted.Render(right)
+	}
+
+	if right == "" {
+		return truncateLine(strings.Join(left, m.styles.muted.Render(" · ")), m.width)
+	}
+	leftText := truncateLine(strings.Join(left, m.styles.muted.Render(" · ")), m.width-lipglossWidth(right)-1)
+	gap := m.width - lipglossWidth(leftText) - lipglossWidth(right)
+	if gap < 1 {
+		gap = 1
+	}
+	return leftText + strings.Repeat(" ", gap) + right
+}
+
+func (m *Model) renderCompletion() string {
+	var lines []string
+	limit := minInt(len(m.completion.filtered), 6)
+	start := 0
+	if m.completion.cursor >= limit {
+		start = m.completion.cursor - limit + 1
+	}
+	for i := start; i < start+limit && i < len(m.completion.filtered); i++ {
+		item := m.completion.filtered[i]
+		line := "  " + item.Value
+		if item.Detail != "" {
+			line += "  " + item.Detail
+		}
+		if i == m.completion.cursor {
+			lines = append(lines, m.styles.compActive.Render("› "+item.Value)+m.styles.muted.Render("  "+item.Detail))
+		} else {
+			lines = append(lines, m.styles.muted.Render(line))
+		}
+	}
+	box := m.styles.completion.Copy().Width(maxInt(20, m.width-4)).Render(strings.Join(lines, "\n"))
+	return box
+}
+
+func (m *Model) renderEditor() string {
+	hint := "enter to send · ctrl+j newline · ctrl+o expand · /help"
+	if m.busy {
+		hint = "enter to queue follow-up · ctrl+s to steer · esc to interrupt"
+	}
+	if m.disconnected {
+		hint = "pi exited · ctrl+c to quit"
+	}
+
+	style := m.styles.editorBox.Copy().Width(maxInt(20, m.width-2))
+	content := m.composer.ta.View()
+	box := style.Render(content)
+	return box + "\n" + m.styles.editorHint.Render(truncateLine(hint, m.width))
+}
+
+func (m *Model) setToast(text string) {
+	m.toast = text
+	m.toastUntil = time.Now().Add(toastDuration)
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
