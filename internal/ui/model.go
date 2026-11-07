@@ -82,6 +82,16 @@ const (
 	commandTimeout = 60 * time.Second
 )
 
+// Layout constants for the frame.
+const (
+	// frameGutter is the number of blank columns kept on each side of the
+	// terminal so the UI never sits flush against the screen edge.
+	frameGutter = 2
+	// minFrameWidth is the narrowest content column worth keeping; below it
+	// the gutters collapse so the layout stays usable.
+	minFrameWidth = 24
+)
+
 // Messages produced by commands.
 type (
 	eventMsg struct{ event rpc.Event }
@@ -1012,7 +1022,8 @@ func (m *Model) layout() {
 	if m.width == 0 || m.height == 0 {
 		return
 	}
-	m.composer.SetWidth(m.width - 4)
+	width := m.frameWidth()
+	m.composer.SetWidth(width - 4)
 
 	// On a very short terminal, shrink the editor instead of letting the frame
 	// clip its bottom border.
@@ -1028,11 +1039,24 @@ func (m *Model) layout() {
 		body = 1
 	}
 	m.body = body
-	m.transcript.SetSize(m.width, body)
+	m.transcript.SetSize(width, body)
 	if m.overlay != nil {
-		m.overlay.Resize(m.width, m.body)
+		m.overlay.Resize(width, m.body)
 	}
 }
+
+// frameWidth is the width of the content column between the side gutters. On
+// very narrow terminals the gutters collapse instead of crushing the layout.
+func (m *Model) frameWidth() int {
+	width := m.width - 2*frameGutter
+	if width < minFrameWidth {
+		return m.width
+	}
+	return width
+}
+
+// frameIndent is the number of blank columns rendered before the content.
+func (m *Model) frameIndent() int { return (m.width - m.frameWidth()) / 2 }
 
 func (m *Model) scheduleTick() tea.Cmd {
 	if m.ticking {
@@ -1070,6 +1094,19 @@ func (m *Model) View() string {
 	}
 	for len(lines) < m.height {
 		lines = append(lines, "")
+	}
+
+	// Inset the frame on both sides so it reads as a column instead of text
+	// pinned to the terminal edge.
+	width, indent := m.frameWidth(), m.frameIndent()
+	if indent > 0 {
+		pad := strings.Repeat(" ", indent)
+		for i, line := range lines {
+			if lipglossWidth(line) > width {
+				line = truncateLine(line, width)
+			}
+			lines[i] = pad + line
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -1138,7 +1175,7 @@ func (m *Model) renderHeader() string {
 		segments = append(segments, m.styles.muted.Render(goal))
 	}
 
-	return truncateLine(strings.Join(segments, m.styles.muted.Render(" · ")), m.width)
+	return truncateLine(strings.Join(segments, m.styles.muted.Render(" · ")), m.frameWidth())
 }
 
 func (m *Model) renderStatus() string {
@@ -1179,11 +1216,12 @@ func (m *Model) renderStatus() string {
 		right = m.styles.muted.Render(right)
 	}
 
+	width := m.frameWidth()
 	if right == "" {
-		return truncateLine(strings.Join(left, m.styles.muted.Render(" · ")), m.width)
+		return truncateLine(strings.Join(left, m.styles.muted.Render(" · ")), width)
 	}
-	leftText := truncateLine(strings.Join(left, m.styles.muted.Render(" · ")), m.width-lipglossWidth(right)-1)
-	gap := m.width - lipglossWidth(leftText) - lipglossWidth(right)
+	leftText := truncateLine(strings.Join(left, m.styles.muted.Render(" · ")), width-lipglossWidth(right)-1)
+	gap := width - lipglossWidth(leftText) - lipglossWidth(right)
 	if gap < 1 {
 		gap = 1
 	}
@@ -1209,7 +1247,7 @@ func (m *Model) renderCompletion() string {
 			lines = append(lines, m.styles.muted.Render(line))
 		}
 	}
-	box := m.styles.completion.Copy().Width(maxInt(20, m.width-4)).Render(strings.Join(lines, "\n"))
+	box := m.styles.completion.Copy().Width(maxInt(20, m.frameWidth()-4)).Render(strings.Join(lines, "\n"))
 	return box
 }
 
@@ -1228,10 +1266,10 @@ func (m *Model) renderEditor() string {
 		hint = "plan mode · writes blocked · " + hint
 	}
 
-	style := m.styles.editorBox.Copy().Width(maxInt(20, m.width-2))
+	style := m.styles.editorBox.Copy().Width(maxInt(20, m.frameWidth()-2))
 	content := m.composer.View()
 	box := style.Render(content)
-	return box + "\n" + m.styles.editorHint.Render(truncateLine(hint, m.width))
+	return box + "\n" + m.styles.editorHint.Render(truncateLine(hint, m.frameWidth()))
 }
 
 func (m *Model) setToast(text string) {

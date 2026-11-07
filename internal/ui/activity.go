@@ -216,7 +216,8 @@ func (m *Model) activityLabel() string {
 // outside the transcript, so a long run stays visible while history scrolls.
 func (m *Model) renderActivity() string {
 	label := m.activityLabel()
-	if label == "" || m.width <= 0 {
+	width := m.frameWidth()
+	if label == "" || width <= 0 {
 		return ""
 	}
 
@@ -231,21 +232,21 @@ func (m *Model) renderActivity() string {
 	if sep != "" {
 		line += sep + meta
 	}
-	if lipglossWidth(line) <= m.width {
+	if lipglossWidth(line) <= width {
 		return line
 	}
 
 	// The GUI shrinks the label first and keeps every meta item whole; only
 	// when the marker and meta alone overflow does the right edge clip, which
 	// loses the rate first.
-	budget := m.width - lipglossWidth(marker) - 1 - lipglossWidth(sep) - lipglossWidth(meta)
+	budget := width - lipglossWidth(marker) - 1 - lipglossWidth(sep) - lipglossWidth(meta)
 	if budget >= 1 {
 		return marker + " " + truncateLine(styled, budget) + sep + meta
 	}
 	head := marker + " "
-	room := m.width - lipglossWidth(head)
+	room := width - lipglossWidth(head)
 	if room < 1 {
-		return truncateLine(line, m.width)
+		return truncateLine(line, width)
 	}
 	return head + truncateLine(meta, room)
 }

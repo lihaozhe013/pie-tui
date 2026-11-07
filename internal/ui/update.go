@@ -1725,7 +1725,7 @@ func (m *Model) openOverlay(o *overlay) {
 		m.transcript.ClearSelection()
 	}
 	m.overlay = o
-	o.Resize(m.width, m.body)
+	o.Resize(m.frameWidth(), m.body)
 	m.completion.Hide()
 	m.layout()
 }

@@ -395,6 +395,9 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// The frame is inset by a blank gutter on each side, so terminal columns
+	// are shifted by the indent before they reach the transcript.
+	localX := msg.X - m.frameIndent()
 	localY := msg.Y - 1 // the header occupies the first row
 	switch msg.Action {
 	case tea.MouseActionPress:
@@ -405,14 +408,14 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			m.transcript.ClearSelection()
 			return m, nil
 		}
-		m.transcript.BeginSelection(msg.X, localY)
+		m.transcript.BeginSelection(localX, localY)
 		return m, nil
 
 	case tea.MouseActionMotion:
 		if !m.transcript.IsDragging() {
 			return m, nil
 		}
-		m.transcript.DragSelection(msg.X, localY)
+		m.transcript.DragSelection(localX, localY)
 		return m, nil
 
 	case tea.MouseActionRelease:
