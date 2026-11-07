@@ -39,6 +39,7 @@ var builtinCommandTable = []builtinCommand{
 	{Name: "/export", Detail: "export the session as HTML"},
 	{Name: "/stats", Detail: "show token and context usage", Aliases: []string{"/status", "/usage"}},
 	{Name: "/clear", Detail: "clear the scrollback", Aliases: []string{"/cls"}},
+	{Name: "/mouse", Detail: "toggle mouse capture for native selection"},
 	{Name: "/help", Detail: "show key bindings", Aliases: []string{"/keys"}},
 	{Name: "/quit", Detail: "exit pie-tui", Aliases: []string{"/exit", "/q"}},
 }

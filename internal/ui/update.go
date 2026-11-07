@@ -497,6 +497,12 @@ func (m *Model) loadHistory(messages []rpc.Message) {
 
 // handleKey routes one key press.
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// A key press ends the mouse selection, including a drag whose release
+	// event was lost outside the terminal window.
+	if m.transcript != nil && m.transcript.HasSelection() {
+		m.transcript.ClearSelection()
+	}
+
 	if m.overlay != nil {
 		return m.handleOverlayKey(msg)
 	}
@@ -796,6 +802,8 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 	case "/clear":
 		m.transcript.Clear()
 		return nil, true
+	case "/mouse":
+		return m.toggleMouse(), true
 	case "/help":
 		title := "Key bindings"
 		if m.opts.Version != "" {
@@ -918,6 +926,8 @@ func (m *Model) helpItems() []pickerItem {
 		{"ctrl+l", "clear the scrollback"},
 		{"up / down", "prompt history"},
 		{"pgup / pgdn / ctrl+u", "scroll the transcript"},
+		{"drag / release", "select transcript text and copy it"},
+		{"shift+drag", "use the terminal's native selection"},
 	}
 	items := make([]pickerItem, 0, len(bindings))
 	for _, binding := range bindings {
@@ -1350,6 +1360,9 @@ func (m *Model) openExtensionOverlay(request *rpc.ExtensionUIRequestEvent) {
 }
 
 func (m *Model) openOverlay(o *overlay) {
+	if m.transcript != nil {
+		m.transcript.ClearSelection()
+	}
 	m.overlay = o
 	o.Resize(m.width, m.body)
 	m.completion.Hide()

@@ -80,14 +80,17 @@ func (b *block) invalidate() { b.revision++ }
 
 // transcript owns the scrollback: a list of blocks rendered into a viewport.
 type transcript struct {
-	vp          viewport.Model
-	blocks      []*block
-	styles      styles
-	md          markdownRenderer
-	width       int
-	height      int
-	stickBottom bool
-	dirty       bool
+	vp           viewport.Model
+	blocks       []*block
+	styles       styles
+	md           markdownRenderer
+	width        int
+	height       int
+	content      []string // rendered lines with tabs expanded
+	sel          textSelection
+	resumeFollow bool
+	stickBottom  bool
+	dirty        bool
 }
 
 func newTranscript(st styles) *transcript {
@@ -117,6 +120,7 @@ func (t *transcript) SetSize(width, height int) {
 	}
 	t.width, t.height = width, height
 	t.vp.Width, t.vp.Height = width, height
+	t.ClearSelection()
 	t.dirty = true
 }
 
@@ -129,6 +133,10 @@ func (t *transcript) Add(b *block) {
 // Clear drops the whole scrollback.
 func (t *transcript) Clear() {
 	t.blocks = nil
+	t.content = nil
+	t.sel = textSelection{}
+	t.resumeFollow = false
+	t.stickBottom = true
 	t.dirty = true
 	t.vp.SetContent("")
 	t.vp.GotoBottom()
@@ -174,8 +182,14 @@ func (t *transcript) Tool(callID string) *block {
 
 // Update forwards scroll input to the viewport and tracks bottom stickiness.
 func (t *transcript) Update(msg tea.Msg) tea.Cmd {
-	wasSticky := t.stickBottom
 	var cmd tea.Cmd
+	if t.sel.active {
+		// Scrolling must not re-enable bottom following while the user is
+		// looking at a highlighted selection.
+		t.vp, cmd = t.vp.Update(msg)
+		return cmd
+	}
+	wasSticky := t.stickBottom
 	t.vp, cmd = t.vp.Update(msg)
 	if wasSticky && t.vp.AtBottom() {
 		t.stickBottom = true
@@ -190,6 +204,9 @@ func (t *transcript) View() string {
 	if t.dirty {
 		t.rebuild()
 	}
+	if t.sel.active {
+		return t.viewSelection()
+	}
 	return t.vp.View()
 }
 
@@ -198,6 +215,7 @@ func (t *transcript) AtBottom() bool { return t.vp.AtBottom() }
 
 // ScrollToBottom pins the viewport to the newest content.
 func (t *transcript) ScrollToBottom() {
+	t.ClearSelection()
 	t.stickBottom = true
 	t.vp.GotoBottom()
 }
@@ -212,7 +230,14 @@ func (t *transcript) rebuild() {
 			parts = append(parts, out)
 		}
 	}
-	t.vp.SetContent(strings.Join(parts, "\n\n"))
+	joined := strings.Join(parts, "\n\n")
+	if joined == "" {
+		t.content = nil
+	} else {
+		t.content = normalizeContent(joined)
+	}
+	t.vp.SetContent(strings.Join(t.content, "\n"))
+	t.clampSelection()
 	if t.stickBottom {
 		t.vp.GotoBottom()
 	}

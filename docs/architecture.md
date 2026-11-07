@@ -85,12 +85,34 @@ the resume picker.
 - `activity.go` — the live run status above the composer: phase, running tools,
   retry and compaction labels, the elapsed clock, the token estimate and t/s
   rate of the block being written, and the pulsing marker.
-- `viewport.go` — transcript blocks, scrolling, and incremental markdown.
+- `viewport.go` — transcript blocks, scrolling, incremental markdown, and the
+  rendered-content cache used by mouse selection.
+- `selection.go` — cell-accurate text selection over the rendered transcript:
+  viewport-to-content coordinates, reverse-video highlighting, and plain-text
+  extraction for the clipboard.
+- `clipboard.go` — OSC52 plus platform clipboard commands, run asynchronously
+  so a slow clipboard tool cannot stall the event loop.
 - `input.go` — multi-line composer, prompt history, and slash completion.
 - `overlay.go` — pickers and extension dialogs.
 - `diff.go` — tool argument/result extraction and a dependency-free line diff.
 - `styles.go` — the Lip Gloss palette and the glamour style derived from it.
 - `view.go` — small formatting helpers.
+
+### Selection
+
+Mouse selection works on the rendered transcript, not on the markdown source.
+The transcript caches its rendered lines and maps a mouse cell to a
+`(line, column)` point, so scrolling and re-rendering keep the highlight anchored
+to the text. Highlighting and copying walk grapheme clusters with `x/ansi`, which
+keeps wide characters, emoji, and existing SGR colors intact. Copying strips ANSI
+sequences, trims trailing spaces per line, and preserves blank lines inside the
+selection.
+
+Mouse capture is on by default. `shift+drag` is left to the terminal for native
+selection, and `/mouse` toggles capture at runtime; `--no-mouse` starts with
+capture off. Copying uses OSC52 for terminals and SSH sessions plus a platform
+command (`pbcopy`, `wl-copy`, `xclip`, `xsel`, or `clip`) for terminals without
+OSC52 support.
 
 ### Rendering budget
 

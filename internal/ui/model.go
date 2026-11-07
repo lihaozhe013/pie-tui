@@ -50,6 +50,12 @@ type Options struct {
 	// AgentDir overrides PI_CODING_AGENT_DIR. Tests use it to keep the
 	// developer's real configuration out of the run.
 	AgentDir string
+	// Mouse reports whether terminal mouse capture is enabled at startup.
+	// The /mouse command toggles it at runtime.
+	Mouse bool
+	// Copy writes text to the clipboard. Nil installs the OSC52 and platform
+	// clipboard writer.
+	Copy func(string) tea.Cmd
 }
 
 // Timing constants for the event loop.
@@ -179,6 +185,8 @@ type Model struct {
 	showThinking bool
 	expanded     bool
 	enterToSend  bool
+	mouseOn      bool
+	copyFn       func(string) tea.Cmd
 
 	busy         bool
 	frame        int
@@ -263,6 +271,11 @@ func New(client Client, opts Options) *Model {
 		paths:        paths,
 		statuses:     map[string]string{},
 		showThinking: true,
+		mouseOn:      opts.Mouse,
+		copyFn:       opts.Copy,
+	}
+	if m.copyFn == nil {
+		m.copyFn = defaultCopyCommand()
 	}
 	if err != nil {
 		m.configErr = err
@@ -683,6 +696,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.openSettingsAt("skills")
 
+	case copiedMsg:
+		if msg.err != nil {
+			m.setToast("copy failed: " + msg.err.Error())
+			return m, nil
+		}
+		if msg.lines > 1 {
+			m.setToast(fmt.Sprintf("copied %d lines", msg.lines))
+		} else {
+			m.setToast(fmt.Sprintf("copied %d chars", msg.chars))
+		}
+		return m, nil
+
 	case titleMsg:
 		if msg.silent {
 			// Auto-naming is best-effort: failures stay out of the transcript.
@@ -699,7 +724,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case tea.MouseMsg:
-		return m, m.transcript.Update(msg)
+		return m.handleMouse(msg)
 	}
 
 	return m, nil

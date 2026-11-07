@@ -17,6 +17,9 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
 - Header line with the current directory (`~`-collapsed), model, thinking
   level, and session name
 - Streaming assistant output with incremental Markdown rendering
+- Mouse selection in the transcript: drag to highlight, release to copy plain
+  text through OSC52 and the platform clipboard; `shift+drag` keeps the
+  terminal's native selection, and `/mouse` toggles capture at runtime
 - A live blue activity bar above the composer names the current wait, thinking
   block, tool call, retry, or compaction, with a pulsing marker, an `Elapsed`
   clock, a `~N tokens` estimate of the block being written, and a live `t/s`
@@ -123,6 +126,7 @@ pie-tui --model anthropic/claude-sonnet-4
 pie-tui --no-session          # ephemeral, nothing is written to disk
 pie-tui --session ~/.pi/agent/sessions/--Users-me-proj--/2024_x.jsonl
 pie-tui --cwd ~/src/project   # start in another working directory
+pie-tui --no-mouse            # let the terminal handle selection natively
 pie-tui --debug               # protocol log in ~/.local/state/pie-tui/
 ```
 
@@ -131,6 +135,11 @@ The agent directory is `PI_CODING_AGENT_DIR` when set, otherwise
 
 Flags are forwarded to pi where they overlap (`--provider`, `--model`, `--name`,
 `--session`, `--session-dir`, `--no-session`).
+
+Mouse capture is on by default. `shift+drag` uses the terminal's native
+selection, and `/mouse` toggles capture. In tmux, OSC52 copying needs
+`set-clipboard on`; the platform clipboard command is the fallback when
+`pie-tui` runs locally.
 
 ## Key bindings
 
@@ -152,6 +161,8 @@ Flags are forwarded to pi where they overlap (`--provider`, `--model`, `--name`,
 | `tab` | accept a slash-command completion |
 | `up` / `down` | prompt history |
 | `pgup` / `pgdn`, `ctrl+u` | scroll the transcript |
+| drag / release | select transcript text and copy it |
+| `shift+drag` | use the terminal's native selection |
 
 ## Slash commands
 
@@ -180,6 +191,7 @@ memory from other CLIs keeps working.
 | `/export` | | export the session as HTML |
 | `/stats` | `/status`, `/usage` | show the statistics panel (messages, tokens, cost, context) |
 | `/clear` | `/cls` | clear the scrollback |
+| `/mouse` | | toggle mouse capture; off leaves selection to the terminal |
 | `/help` | `/keys` | show key bindings and commands |
 | `/quit` | `/exit`, `/q` | exit pie-tui |
 

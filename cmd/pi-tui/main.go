@@ -137,6 +137,7 @@ func run(args []string, stderr io.Writer) int {
 		Version:    version,
 		PiBin:      piBinary,
 		Restart:    restart,
+		Mouse:      !cfg.noMouse,
 	})
 
 	options := []tea.ProgramOption{
@@ -178,7 +179,7 @@ func parseFlags(args []string, stderr io.Writer) (config, error) {
 	fs.StringVar(&cfg.sessionDir, "session-dir", "", "session storage directory")
 	fs.StringVar(&cfg.cwd, "cwd", "", "working directory for the session (default: current directory)")
 	fs.BoolVar(&cfg.noSession, "no-session", false, "run without persisting a session")
-	fs.BoolVar(&cfg.noMouse, "no-mouse", false, "disable mouse wheel scrolling")
+	fs.BoolVar(&cfg.noMouse, "no-mouse", false, "disable mouse capture (wheel scrolling and in-app selection)")
 	fs.BoolVar(&cfg.debug, "debug", false, "write protocol diagnostics to the state directory")
 	fs.BoolVar(&cfg.showVersion, "version", false, "print the version and exit")
 
