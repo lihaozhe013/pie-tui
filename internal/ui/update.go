@@ -562,12 +562,18 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "ctrl+t":
 		m.showThinking = !m.showThinking
+		if m.prefs != nil {
+			_ = m.prefs.SetShowThinking(m.showThinking)
+		}
 		m.applyThinkingVisibility()
 		m.setToast(fmt.Sprintf("thinking blocks %s", onOff(m.showThinking)))
 		return m, nil
 
 	case "ctrl+o":
 		m.expanded = !m.expanded
+		if m.prefs != nil {
+			_ = m.prefs.SetExpandTools(m.expanded)
+		}
 		m.applyExpansion()
 		m.setToast(fmt.Sprintf("tool output %s", onOff(m.expanded)))
 		return m, nil

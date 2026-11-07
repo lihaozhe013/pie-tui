@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/lihaozhe/pie-tui/internal/config"
 	"github.com/lihaozhe/pie-tui/internal/rpc"
 )
 
@@ -538,5 +539,24 @@ func TestModelWorksWithoutModelPickerData(t *testing.T) {
 	}
 	if model.toast == "" {
 		t.Fatal("expected a toast explaining the missing models")
+	}
+}
+
+func TestTogglesPersistPreferences(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PI_CODING_AGENT_DIR", dir)
+	model, _ := newTestModel(t)
+	model.showThinking = true
+	model.expanded = false
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
+	model = updated.(*Model)
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
+	model = updated.(*Model)
+	prefs, err := config.LoadTUIConfig(model.paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prefs.ShowThinking() || !prefs.ExpandTools() {
+		t.Fatalf("thinking=%v expanded=%v", prefs.ShowThinking(), prefs.ExpandTools())
 	}
 }
