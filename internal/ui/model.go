@@ -132,6 +132,8 @@ type (
 		selection string
 		err       error
 	}
+
+	commandsMsg []rpc.CommandInfo
 )
 
 // streamState accumulates one streaming assistant response.
@@ -529,7 +531,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.overlay != nil && m.overlay.action == "settings" {
 			m.openSettingsOverlay()
 		}
-		return m, tea.Batch(m.refreshState(), m.loadEntries(), m.loadToolSnapshot())
+		return m, tea.Batch(m.refreshState(), m.refreshCommands(), m.loadEntries(), m.loadToolSnapshot())
+
+	case commandsMsg:
+		m.commands = []rpc.CommandInfo(msg)
+		m.bridgeReady = m.hasPiCommand("pie-tools")
+		m.goalAvailable = m.hasPiCommand("goal")
+		m.completion.SetItems(m.commandItems())
+		return m, nil
 
 	case providerCheckMsg:
 		m.setToast(providerCheckSummary(msg))

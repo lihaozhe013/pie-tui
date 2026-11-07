@@ -62,3 +62,17 @@ func TestReloadKeepsSettingsOpen(t *testing.T) {
 		t.Fatal("reload closed the settings overlay")
 	}
 }
+
+func TestCommandsMsgRefreshesAvailability(t *testing.T) {
+	m := New(newFakeClient(), Options{})
+	updated, _ := m.Update(commandsMsg{{Name: "pie-tools"}, {Name: "goal"}})
+	m = updated.(*Model)
+	if !m.bridgeReady || !m.goalAvailable {
+		t.Fatalf("bridge=%v goal=%v", m.bridgeReady, m.goalAvailable)
+	}
+	updated, _ = m.Update(commandsMsg{{Name: "pie-tools"}})
+	m = updated.(*Model)
+	if m.goalAvailable {
+		t.Fatal("goal stayed available after the command disappeared")
+	}
+}

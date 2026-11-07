@@ -1207,6 +1207,27 @@ func (m *Model) applyResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// refreshCommands rereads pi's extension commands after a reload, so a package
+// disabled in Settings stops advertising its commands without a restart.
+func (m *Model) refreshCommands() tea.Cmd {
+	client := m.client
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		response, err := client.DoOK(ctx, rpc.GetCommands())
+		if err != nil {
+			return commandsMsg(nil)
+		}
+		payload, err := rpc.DecodeTyped[struct {
+			Commands []rpc.CommandInfo `json:"commands"`
+		}](response)
+		if err != nil {
+			return commandsMsg(nil)
+		}
+		return commandsMsg(payload.Commands)
+	}
+}
+
 func (m *Model) refreshState() tea.Cmd {
 	client := m.client
 	return func() tea.Msg {
