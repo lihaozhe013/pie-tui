@@ -24,6 +24,23 @@ type composerRow struct {
 	end   int
 }
 
+// composerSelection tracks a mouse selection over buffer rune indices. The
+// anchor is where the drag started and cursor is the moving end.
+type composerSelection struct {
+	active   bool
+	dragging bool
+	moved    bool
+	anchor   int
+	cursor   int
+}
+
+func (s composerSelection) normalized() (int, int) {
+	if s.anchor > s.cursor {
+		return s.cursor, s.anchor
+	}
+	return s.anchor, s.cursor
+}
+
 // composer is the multi-line prompt editor. It is a small, self-contained
 // editor instead of a wrapped textarea widget so the cursor, the soft wrapping,
 // the scroll offset and the box height always agree.
@@ -43,6 +60,8 @@ type composer struct {
 	rows    []composerRow
 	scroll  int // index of the first visible row
 	goalCol int // sticky column for vertical movement, -1 when unset
+
+	sel composerSelection
 
 	history []string
 	histAt  int
@@ -104,9 +123,19 @@ func (c *composer) Reset() {
 	c.cursor = 0
 	c.scroll = 0
 	c.goalCol = -1
+	c.sel = composerSelection{}
 	c.histAt = -1
 	c.draft = ""
 	c.rewrap()
+}
+
+// Clear empties the editor and keeps the draft recallable with the up arrow,
+// so a stray ctrl+c cannot destroy a long prompt.
+func (c *composer) Clear() {
+	if strings.TrimSpace(string(c.value)) != "" {
+		c.PushHistory(string(c.value))
+	}
+	c.Reset()
 }
 
 // SetText replaces the content and moves the cursor to the end.
@@ -114,6 +143,7 @@ func (c *composer) SetText(value string) {
 	c.value = []rune(normalizeComposerText(value))
 	c.cursor = len(c.value)
 	c.goalCol = -1
+	c.sel = composerSelection{}
 	c.rewrap()
 }
 
@@ -142,6 +172,9 @@ func (c *composer) Update(msg tea.Msg) tea.Cmd {
 	if !ok {
 		return nil
 	}
+	// Any keystroke ends a display-only selection and puts the caret back
+	// under the text cursor.
+	c.ClearSelection()
 
 	switch key.Type {
 	case tea.KeyRunes:
@@ -252,6 +285,117 @@ func (c *composer) MoveDown() bool {
 	return true
 }
 
+// HasSelection reports whether a non-empty range is highlighted.
+func (c *composer) HasSelection() bool {
+	_, _, ok := c.selectionRange()
+	return ok
+}
+
+// IsDragging reports whether the left mouse button is selecting.
+func (c *composer) IsDragging() bool { return c.sel.dragging }
+
+// BeginSelection parks the caret at a viewport-relative cell and starts a
+// selection there. A plain click is the mouse equivalent of placing the caret.
+func (c *composer) BeginSelection(row, col int) {
+	index := c.indexAtViewportCell(row, col)
+	c.cursor = index
+	c.goalCol = -1
+	c.sel = composerSelection{active: true, dragging: true, anchor: index, cursor: index}
+	c.updateViewport()
+}
+
+// DragSelection extends the selection to a viewport-relative cell. A drag
+// outside the visible rows scrolls the editor one row per event.
+func (c *composer) DragSelection(row, col int) {
+	if !c.sel.dragging {
+		return
+	}
+	if row < 0 {
+		if c.scroll > 0 {
+			c.scroll--
+		}
+		row = 0
+	} else if row >= c.visible {
+		if c.scroll+c.visible < len(c.rows) {
+			c.scroll++
+		}
+		row = c.visible - 1
+	}
+	index := c.indexAtViewportCell(row, col)
+	if index != c.sel.anchor {
+		c.sel.moved = true
+	}
+	c.sel.cursor = index
+	c.cursor = index
+}
+
+// EndSelection finishes a drag. It returns the selected text only when the
+// pointer actually moved; a plain click leaves the caret where it landed.
+func (c *composer) EndSelection() string {
+	if !c.sel.dragging {
+		return ""
+	}
+	c.sel.dragging = false
+	if !c.sel.moved || c.sel.anchor == c.sel.cursor {
+		c.ClearSelection()
+		return ""
+	}
+	return c.SelectedText()
+}
+
+// ClearSelection removes the highlight without moving the caret.
+func (c *composer) ClearSelection() { c.sel = composerSelection{} }
+
+// SelectedText returns the highlighted range as plain text.
+func (c *composer) SelectedText() string {
+	start, end, ok := c.selectionRange()
+	if !ok {
+		return ""
+	}
+	return string(c.value[start:end])
+}
+
+// selectionRange returns the highlighted rune range in reading order.
+func (c *composer) selectionRange() (int, int, bool) {
+	if !c.sel.active || c.sel.anchor == c.sel.cursor {
+		return 0, 0, false
+	}
+	start, end := c.sel.normalized()
+	start = clampInt(start, 0, len(c.value))
+	end = clampInt(end, 0, len(c.value))
+	if start >= end {
+		return 0, 0, false
+	}
+	return start, end, true
+}
+
+// indexAtViewportCell maps a visible editor cell to the nearest rune index.
+// Clicking past the end of a row parks the caret at that row's end.
+func (c *composer) indexAtViewportCell(row, col int) int {
+	if len(c.rows) == 0 {
+		return 0
+	}
+	row = clampInt(row, 0, maxInt(0, c.visible-1))
+	index := c.scroll + row
+	if index >= len(c.rows) {
+		index = len(c.rows) - 1
+	}
+	bound := c.rows[index]
+	col = clampInt(col, 0, c.textWidth())
+
+	at := bound.start
+	width := 0
+	for at < bound.end {
+		step := runeWidth(c.value[at])
+		if col < width+step {
+			return at
+		}
+		width += step
+		at++
+	}
+	return bound.end
+}
+
 // PushHistory records a submitted prompt.
 func (c *composer) PushHistory(value string) {
 	if strings.TrimSpace(value) == "" {
@@ -327,55 +471,87 @@ func (c *composer) View() string {
 	return out.String()
 }
 
-// renderRow draws one visual row and puts the caret on its cell when this row
-// owns the cursor. The caret is a reversed cell, so it never paints a whole
-// line background.
+// renderRow draws one visual row, the caret on its cell when this row owns
+// the cursor, and the mouse selection when it overlaps the row. The caret is
+// hidden while a selection is visible so the highlight reads as one block.
 func (c *composer) renderRow(index int, cursorHere bool, width int) string {
 	row := c.rows[index]
 	text := c.value[row.start:row.end]
 	used := composerWidth(text)
 
-	if !cursorHere {
-		pad := width - used
-		if pad < 0 {
-			pad = 0
+	selStart, selEnd, selected := c.selectionRange()
+	rowSelected := selected && selStart < row.end && selEnd > row.start
+
+	cursorAt := -1
+	if cursorHere && !selected {
+		offset := c.cursor - row.start
+		if offset < 0 {
+			offset = 0
 		}
-		return c.styles.editorText.Render(string(text)) + strings.Repeat(" ", pad)
+		if offset > len(text) {
+			offset = len(text)
+		}
+		// A caret past the last rune needs its own cell. When the row already
+		// fills the content width there is no room for it, so park it on the
+		// last rune instead of spilling a column into the box border.
+		if offset == len(text) && used >= width && len(text) > 0 {
+			offset = len(text) - 1
+		}
+		cursorAt = offset
 	}
 
-	offset := c.cursor - row.start
-	if offset < 0 {
-		offset = 0
-	}
-	if offset > len(text) {
-		offset = len(text)
-	}
-	// A caret past the last rune needs its own cell. When the row already
-	// fills the content width there is no room for it, so park it on the last
-	// rune instead of spilling a column into the box border.
-	if offset == len(text) && used >= width && len(text) > 0 {
-		offset = len(text) - 1
+	const (
+		cellPlain = iota
+		cellSelected
+		cellCursor
+	)
+	styleAt := func(at int) int {
+		if at == cursorAt {
+			return cellCursor
+		}
+		if rowSelected && row.start+at >= selStart && row.start+at < selEnd {
+			return cellSelected
+		}
+		return cellPlain
 	}
 
-	pre := string(text[:offset])
-	cell := " "
-	post := ""
-	extra := 1
-	if offset < len(text) {
-		cell = string(text[offset])
-		post = string(text[offset+1:])
-		extra = 0
+	var out strings.Builder
+	for at := 0; at < len(text); {
+		kind := styleAt(at)
+		next := at + 1
+		for next < len(text) && styleAt(next) == kind {
+			next++
+		}
+		segment := string(text[at:next])
+		switch kind {
+		case cellCursor:
+			out.WriteString(c.styles.editorCursor.Render(segment))
+		case cellSelected:
+			out.WriteString(c.styles.editorSelection.Render(segment))
+		default:
+			out.WriteString(c.styles.editorText.Render(segment))
+		}
+		at = next
+	}
+
+	extra := 0
+	if cursorAt == len(text) {
+		out.WriteString(c.styles.editorCursor.Render(" "))
+		extra = 1
+	}
+	// A newline has no cell of its own. Highlight one trailing cell when the
+	// selection includes it so multi-line selections read as continuous.
+	if selected && selStart <= row.end && selEnd > row.end && row.end < len(c.value) && c.value[row.end] == '\n' && used+extra < width {
+		out.WriteString(c.styles.editorSelection.Render(" "))
+		extra++
 	}
 
 	pad := width - used - extra
 	if pad < 0 {
 		pad = 0
 	}
-
-	return c.styles.editorText.Render(pre) +
-		c.styles.editorCursor.Render(cell) +
-		c.styles.editorText.Render(post) +
-		strings.Repeat(" ", pad)
+	out.WriteString(strings.Repeat(" ", pad))
+	return out.String()
 }
 
 // placeholderLine shows the hint with the caret parked in front of it.

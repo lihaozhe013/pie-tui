@@ -17,6 +17,9 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
 - Header line with the current directory (`~`-collapsed), model, thinking
   level, and session name
 - Streaming assistant output with incremental Markdown rendering
+- Mouse editing in the composer: click to place the caret, drag to select, and
+  release to copy the selection through the same clipboard path as the
+  transcript
 - Mouse selection in the transcript: drag to highlight, release to copy plain
   text through OSC52 and the platform clipboard; `shift+drag` keeps the
   terminal's native selection, and `/mouse` toggles capture at runtime
@@ -146,9 +149,10 @@ Flags are forwarded to pi where they overlap (`--provider`, `--model`, `--name`,
 `--session`, `--session-dir`, `--no-session`).
 
 Mouse capture is on by default. `shift+drag` uses the terminal's native
-selection, and `/mouse` toggles capture. In tmux, OSC52 copying needs
-`set-clipboard on`; the platform clipboard command is the fallback when
-`pie-tui` runs locally.
+selection, and `/mouse` toggles capture. Clicking inside the composer places
+the caret, and dragging there copies the highlighted prompt text on release. In
+tmux, OSC52 copying needs `set-clipboard on`; the platform clipboard command is
+the fallback when `pie-tui` runs locally.
 
 ## Key bindings
 
@@ -158,7 +162,7 @@ selection, and `/mouse` toggles capture. In tmux, OSC52 copying needs
 | `alt+enter`, `ctrl+j`, `\` then `enter` | insert a newline |
 | `ctrl+s` | steer the running turn |
 | `esc` | interrupt the running turn (queues are restored to the editor) |
-| `ctrl+c` | interrupt; press twice to quit |
+| `ctrl+c` | interrupt; clear the prompt (press `up` to restore it); on an empty prompt, press twice to quit |
 | `ctrl+d` | delete the character under the cursor; quit when the editor is empty |
 | `ctrl+k` | pick a model |
 | `ctrl+g` | pick a tool preset |
@@ -169,13 +173,14 @@ selection, and `/mouse` toggles capture. In tmux, OSC52 copying needs
 | `ctrl+l` | clear the scrollback |
 | `tab` | accept a slash-command completion |
 | `up` / `down` | move inside the prompt; prompt history from the first or last row |
+| click | place the caret in the prompt |
+| drag in the prompt / transcript, release | select text and copy it |
 | `left` / `right`, `ctrl+b` / `ctrl+f` | move by one character |
 | `alt+left` / `alt+right`, `ctrl+left` / `ctrl+right` | move by one word |
 | `home` / `end`, `ctrl+a` / `ctrl+e` | start or end of the current line |
 | `ctrl+home` / `ctrl+end` | start or end of the whole prompt |
 | `ctrl+w`, `alt+backspace` | delete the previous word |
 | `pgup` / `pgdn`, `ctrl+u` | scroll the transcript |
-| drag / release | select transcript text and copy it |
 | `shift+drag` | use the terminal's native selection |
 
 ## Slash commands

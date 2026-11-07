@@ -515,6 +515,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.transcript != nil && m.transcript.HasSelection() {
 		m.transcript.ClearSelection()
 	}
+	if m.composer != nil && m.composer.HasSelection() {
+		m.composer.ClearSelection()
+	}
 
 	if m.overlay != nil {
 		return m.handleOverlayKey(msg)
@@ -557,16 +560,21 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.busy {
 			return m, m.abort()
 		}
+		// With a draft, ctrl+c only clears it; quitting is armed by two presses
+		// on an empty prompt. Otherwise typing after a clear could quit by
+		// accident within the double-press window.
+		if !m.composer.Empty() {
+			m.composer.Clear()
+			m.completion.Hide()
+			m.layout()
+			m.ctrlCAt = time.Time{}
+			m.setToast("input cleared · press up to restore")
+			return m, nil
+		}
 		if time.Since(m.ctrlCAt) < 1500*time.Millisecond {
 			return m, tea.Quit
 		}
 		m.ctrlCAt = time.Now()
-		if !m.composer.Empty() {
-			m.composer.Reset()
-			m.completion.Hide()
-			m.layout()
-			return m, nil
-		}
 		m.setToast("press ctrl+c again to quit")
 		return m, nil
 
@@ -952,7 +960,7 @@ func (m *Model) helpItems() []pickerItem {
 		{"alt+enter / ctrl+j", "insert a newline"},
 		{"ctrl+s", "steer the running turn"},
 		{"esc", "interrupt the running turn"},
-		{"ctrl+c", "interrupt, twice to quit"},
+		{"ctrl+c", "interrupt; clear the prompt (up restores it); on empty, twice to quit"},
 		{"ctrl+k", "pick a model"},
 		{"ctrl+g", "pick a tool preset"},
 		{"ctrl+p", "open the command palette"},
@@ -962,7 +970,8 @@ func (m *Model) helpItems() []pickerItem {
 		{"ctrl+l", "clear the scrollback"},
 		{"up / down", "prompt history"},
 		{"pgup / pgdn / ctrl+u", "scroll the transcript"},
-		{"drag / release", "select transcript text and copy it"},
+		{"click", "place the caret in the prompt"},
+		{"drag / release", "select prompt or transcript text and copy it"},
 		{"shift+drag", "use the terminal's native selection"},
 	}
 	items := make([]pickerItem, 0, len(bindings))
@@ -1723,6 +1732,9 @@ func (m *Model) openExtensionOverlay(request *rpc.ExtensionUIRequestEvent) {
 func (m *Model) openOverlay(o *overlay) {
 	if m.transcript != nil {
 		m.transcript.ClearSelection()
+	}
+	if m.composer != nil {
+		m.composer.ClearSelection()
 	}
 	m.overlay = o
 	o.Resize(m.frameWidth(), m.body)

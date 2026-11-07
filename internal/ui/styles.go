@@ -92,6 +92,7 @@ type styles struct {
 	editorHint        lipgloss.Style
 	editorText        lipgloss.Style
 	editorCursor      lipgloss.Style
+	editorSelection   lipgloss.Style
 	editorPlaceholder lipgloss.Style
 	scrollRail        lipgloss.Style
 	scrollThumb       lipgloss.Style
@@ -147,6 +148,7 @@ func newStyles(t theme) styles {
 		editorHint:        lipgloss.NewStyle().Foreground(t.Editor),
 		editorText:        lipgloss.NewStyle().Foreground(t.Base),
 		editorCursor:      lipgloss.NewStyle().Reverse(true),
+		editorSelection:   lipgloss.NewStyle().Background(t.Accent).Foreground(t.Panel),
 		editorPlaceholder: lipgloss.NewStyle().Foreground(t.Editor),
 		scrollRail:        lipgloss.NewStyle().Foreground(t.Editor),
 		scrollThumb:       lipgloss.NewStyle().Foreground(t.AccentSoft),

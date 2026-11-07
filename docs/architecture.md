@@ -99,8 +99,8 @@ break the resume picker.
   widget paints a full-line cursor background, moves across logical lines and
   hides its own scrollbar, none of which fit a soft-wrapped composer. The
   custom editor owns wrapping, the caret cell, the sticky column for vertical
-  movement, and the scroll offset, so the box height and the visible rows
-  always agree.
+  movement, mouse selection over rune indices, and the scroll offset, so the
+  box height and the visible rows always agree.
 - `overlay.go` — pickers and extension dialogs.
 - `diff.go` — tool argument/result extraction and a dependency-free line diff.
 - `styles.go` — the Lip Gloss palette and the glamour style derived from it.
@@ -137,6 +137,16 @@ to the text. Highlighting and copying walk grapheme clusters with `x/ansi`, whic
 keeps wide characters, emoji, and existing SGR colors intact. Copying strips ANSI
 sequences, trims trailing spaces per line, and preserves blank lines inside the
 selection.
+
+The composer shares the clipboard path but maps mouse cells to rune indices in
+the buffer. A click places the caret; a drag highlights the wrapped rows and
+copies the selected runes on release. The editor hides the caret while a
+selection is visible and renders selected newlines as a trailing highlighted
+cell so multi-line selections read as one block.
+
+Clearing the prompt with `ctrl+c` pushes the draft into the editor's history, so
+`up` restores it after an accidental clear. Submitted prompts and cleared drafts
+share the same history ring.
 
 Mouse capture is on by default. `shift+drag` is left to the terminal for native
 selection, and `/mouse` toggles capture at runtime; `--no-mouse` starts with

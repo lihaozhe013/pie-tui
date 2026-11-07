@@ -367,6 +367,82 @@ func clampInt(value, low, high int) int {
 	return value
 }
 
+// composerTop is the terminal row of the composer's top rule. It mirrors the
+// frame composition in View and layout.
+func (m *Model) composerTop() int {
+	top := 1 + m.body + 1 + m.activityRows()
+	if m.completion.visible && m.overlay == nil {
+		top += minInt(len(m.completion.filtered), 6) + 2
+	}
+	return top
+}
+
+// composerColumn maps a terminal column to a text column inside the editor.
+// The editor pads one column on each side; clicks in the padding and on the
+// scrollbar clamp to the nearest text cell.
+func (m *Model) composerColumn(x int) int {
+	col := x - m.frameIndent() - 1
+	return clampInt(col, 0, m.composer.textWidth())
+}
+
+// composerCell reports whether a terminal cell is on the editor's text rows.
+func (m *Model) composerCell(x, y int) (int, bool) {
+	if m.composer == nil || !m.ready {
+		return 0, false
+	}
+	top := m.composerTop() + 1 // first row inside the top rule
+	if y < top || y >= top+m.composer.Height() {
+		return 0, false
+	}
+	left := m.frameIndent()
+	if x < left || x >= left+m.frameWidth() {
+		return 0, false
+	}
+	return y - top, true
+}
+
+// handleComposerMouse routes clicks and drags over the prompt editor. A plain
+// click places the caret; a drag selects text and copies it on release.
+func (m *Model) handleComposerMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd, bool) {
+	if m.composer == nil {
+		return m, nil, false
+	}
+	switch msg.Action {
+	case tea.MouseActionPress:
+		if msg.Button != tea.MouseButtonLeft {
+			return m, nil, false
+		}
+		row, ok := m.composerCell(msg.X, msg.Y)
+		if !ok {
+			return m, nil, false
+		}
+		if m.transcript != nil {
+			m.transcript.ClearSelection()
+		}
+		m.composer.BeginSelection(row, m.composerColumn(msg.X))
+		return m, nil, true
+
+	case tea.MouseActionMotion:
+		if !m.composer.IsDragging() {
+			return m, nil, false
+		}
+		row := msg.Y - (m.composerTop() + 1)
+		m.composer.DragSelection(row, m.composerColumn(msg.X))
+		return m, nil, true
+
+	case tea.MouseActionRelease:
+		if !m.composer.IsDragging() {
+			return m, nil, false
+		}
+		text := m.composer.EndSelection()
+		if text == "" {
+			return m, nil, true
+		}
+		return m, m.copySelection(text), true
+	}
+	return m, nil, false
+}
+
 // handleMouse routes mouse events between transcript selection and the
 // viewport's wheel scrolling.
 func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
@@ -395,6 +471,10 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if model, cmd, handled := m.handleComposerMouse(msg); handled {
+		return model, cmd
+	}
+
 	// The frame is inset by a blank gutter on each side, so terminal columns
 	// are shifted by the indent before they reach the transcript.
 	localX := msg.X - m.frameIndent()
@@ -403,6 +483,9 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	case tea.MouseActionPress:
 		if msg.Button != tea.MouseButtonLeft {
 			return m, nil
+		}
+		if m.composer != nil {
+			m.composer.ClearSelection()
 		}
 		if localY < 0 || localY >= m.body {
 			m.transcript.ClearSelection()
@@ -442,6 +525,9 @@ func (m *Model) toggleMouse() tea.Cmd {
 		return func() tea.Msg { return tea.EnableMouseCellMotion() }
 	}
 	m.transcript.ClearSelection()
+	if m.composer != nil {
+		m.composer.ClearSelection()
+	}
 	m.setToast("mouse capture off · terminal selection · pgup/pgdn to scroll")
 	return func() tea.Msg { return tea.DisableMouse() }
 }
