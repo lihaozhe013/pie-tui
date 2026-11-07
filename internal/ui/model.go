@@ -505,6 +505,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case skillActionMsg:
+		return m.applySkillAction(msg)
+
+	case skillSearchMsg:
+		return m.applySkillSearch(msg)
+
+	case skillEditMsg:
+		if msg.err != nil {
+			m.addError("edit skill: " + msg.err.Error())
+		}
+		return m, m.openSettingsAt("skills")
+
 	case titleMsg:
 		if msg.err != nil {
 			m.addError("title: " + msg.err.Error())

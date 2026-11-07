@@ -1292,6 +1292,10 @@ func (m *Model) selectOverlayItem() tea.Cmd {
 		case "preset":
 			m.closeOverlay()
 			return m.applyPreset(item.Value)
+		case "skill-search-results":
+			m.closeOverlay()
+			m.setToast("installing " + item.Value + "…")
+			return m.installSkill(item.Value)
 		default:
 			m.closeOverlay()
 			return nil
@@ -1319,6 +1323,14 @@ func (m *Model) answerInput(value string) tea.Cmd {
 
 	if action == "session-name" {
 		return m.setSessionName(value)
+	}
+	if action == "skill-search" {
+		m.setToast("searching skills.sh…")
+		return m.searchSkills(value)
+	}
+	if action == "skill-install-source" {
+		m.setToast("installing " + value + "…")
+		return m.installSkill(value)
 	}
 	if action == "settings-agents" {
 		if err := config.WriteInstructions(m.paths, value); err != nil {

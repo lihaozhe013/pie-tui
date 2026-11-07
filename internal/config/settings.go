@@ -115,6 +115,12 @@ func (s *Settings) EnabledModels() ([]string, bool, error) {
 	return s.stringSlice("enabledModels")
 }
 
+// Skills returns the explicit skill files or directories from settings.json.
+func (s *Settings) Skills() ([]string, error) {
+	items, _, err := s.stringSlice("skills")
+	return items, err
+}
+
 // DefaultTools returns the raw defaultTools entries, including +name and
 // -name modifiers. Absent means pi's built-in defaults.
 func (s *Settings) DefaultTools() ([]string, bool, error) {

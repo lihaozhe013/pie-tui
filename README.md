@@ -35,6 +35,11 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   limit, startup defaults, enabled-model patterns, per-model thinking levels,
   provider credentials, and custom provider and model editors (including
   compatibility endpoints, costs, and thinking maps)
+- A Skills tab that discovers the agent, project, and settings paths with
+  pi's layout rules, shows model-invocation state, toggles
+  `disable-model-invocation` in the frontmatter, opens the skill file in
+  `$VISUAL`/`$EDITOR`, and searches or installs from skills.sh with the
+  `npx skills` CLI
 - Goal controls through a manually installed goal package: `/goal` shows the
   status, objective, token usage, and the start, pause, resume, complete, and
   clear actions; the header carries the status. `pie-tui` never bundles the

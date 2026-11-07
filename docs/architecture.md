@@ -126,6 +126,16 @@ clients keeps its preset and its Plan mode. If the extension fails to load, the
 UI reports `unavailable` in Settings › General and refuses preset changes
 rather than silently diverging.
 
+Skills are read with pi's own discovery rules: a `SKILL.md` directory is one
+skill and is not recursed into, standalone `.md` children are skills, and
+symlinks are followed. The roots are the agent directory's `skills/`, the
+project's `.pi/skills/`, and the `skills` list in `settings.json`.
+`disable-model-invocation` is edited line by line inside the frontmatter so the
+rest of the file keeps its formatting, and the write follows symlinks (a global
+skill installed by `npx skills` is a link into `~/.agents/skills`). Installing
+and updating shell out to `npx skills`, matching the web panel's CLI, rather
+than writing skill directories in Go.
+
 Goals are the goal package's, not the client's. `internal/session` reads the
 newest `custom` entry whose `customType` is `pi-better-goal` or
 `pi-codex-goal`; `set` supplies the status, objective, and usage, and `clear`
