@@ -288,18 +288,14 @@ func TestTUIConfigDefaultsAndWrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if cfg.Theme() != "auto" || !cfg.EnterToSend() || cfg.DiffLayout() != DiffUnified || !cfg.ShowToolCards() {
-		t.Fatalf("defaults: theme=%q enter=%v diff=%q cards=%v",
-			cfg.Theme(), cfg.EnterToSend(), cfg.DiffLayout(), cfg.ShowToolCards())
+	if cfg.Theme() != "auto" || !cfg.EnterToSend() {
+		t.Fatalf("defaults: theme=%q enter=%v", cfg.Theme(), cfg.EnterToSend())
 	}
 	if err := cfg.SetTheme("dusk"); err != nil {
 		t.Fatalf("theme: %v", err)
 	}
 	if err := cfg.SetEnterToSend(false); err != nil {
 		t.Fatalf("enter: %v", err)
-	}
-	if err := cfg.SetDiffLayout(DiffSplit); err != nil {
-		t.Fatalf("diff: %v", err)
 	}
 	if err := cfg.SetGoalEnabled(true); err != nil {
 		t.Fatalf("goal: %v", err)
@@ -312,12 +308,9 @@ func TestTUIConfigDefaultsAndWrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if again.Theme() != "dusk" || again.EnterToSend() || again.DiffLayout() != DiffSplit ||
+	if again.Theme() != "dusk" || again.EnterToSend() ||
 		!again.GoalEnabled() || again.LastCWD() != "/tmp/project" {
 		t.Fatalf("reloaded: %+v", again)
-	}
-	if err := again.SetDiffLayout("sideways"); err == nil {
-		t.Fatal("expected an invalid layout error")
 	}
 }
 

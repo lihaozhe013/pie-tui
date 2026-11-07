@@ -2,12 +2,6 @@ package config
 
 import "fmt"
 
-// Terminal-only preference values.
-const (
-	DiffUnified = "unified"
-	DiffSplit   = "split"
-)
-
 // TUIConfig is pie-tui's own preferences file. Anything both clients share
 // lives in pi's files instead; this holds only choices a browser does not have.
 type TUIConfig struct {
@@ -55,23 +49,6 @@ func (c *TUIConfig) SetEnterToSend(enabled bool) error {
 	return c.update(func(root *Value) { root.SetBool("enterToSend", enabled) })
 }
 
-// DiffLayout returns DiffUnified or DiffSplit.
-func (c *TUIConfig) DiffLayout() string {
-	layout := c.root.Get("diffLayout").StringOr(DiffUnified)
-	if layout != DiffSplit {
-		return DiffUnified
-	}
-	return layout
-}
-
-// SetDiffLayout saves the diff layout.
-func (c *TUIConfig) SetDiffLayout(layout string) error {
-	if layout != DiffUnified && layout != DiffSplit {
-		return fmt.Errorf("diffLayout: unknown layout %q", layout)
-	}
-	return c.update(func(root *Value) { root.SetString("diffLayout", layout) })
-}
-
 // GoalEnabled reports whether the goal panel was enabled. It does not mean the
 // goal extension is installed; the caller checks availability separately.
 func (c *TUIConfig) GoalEnabled() bool {
@@ -114,21 +91,6 @@ func (c *TUIConfig) SetToolPreset(selection string) error {
 		return fmt.Errorf("toolPreset: empty selection")
 	}
 	return c.update(func(root *Value) { root.SetString("toolPreset", selection) })
-}
-
-// ShowToolCards reports whether tool calls render as cards rather than compact
-// lines. Default true.
-func (c *TUIConfig) ShowToolCards() bool {
-	value := c.root.Get("showToolCards")
-	if value == nil {
-		return true
-	}
-	return value.BoolOr(true)
-}
-
-// SetShowToolCards saves the tool rendering preference.
-func (c *TUIConfig) SetShowToolCards(enabled bool) error {
-	return c.update(func(root *Value) { root.SetBool("showToolCards", enabled) })
 }
 
 // ShowThinking reports whether thinking blocks are visible. Default true.
