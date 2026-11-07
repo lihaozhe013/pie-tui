@@ -505,6 +505,11 @@ func (m *Model) renderHeader() string {
 	title := m.styles.header.Render("pie-tui")
 	segments := []string{title}
 
+	// The working directory identifies the session group, so show it up front.
+	if cwd := displayPath(m.opts.CWD); cwd != "" {
+		segments = append(segments, m.styles.accent.Render(cwd))
+	}
+
 	model := "no model"
 	if m.state.Model != nil {
 		model = m.state.Model.Label()

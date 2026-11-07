@@ -225,7 +225,7 @@ func TestModelRendersHeader(t *testing.T) {
 	model, _ := newTestModel(t)
 	view := ansi.Strip(model.View())
 
-	for _, want := range []string{"pie-tui", "prov/m1", "think:high", "demo"} {
+	for _, want := range []string{"pie-tui", "/work/dir", "prov/m1", "think:high", "demo"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}

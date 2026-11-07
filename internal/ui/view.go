@@ -26,23 +26,38 @@ func truncateLine(s string, width int) string {
 }
 
 // shortenPath replaces the home directory with ~ and elides deep paths.
+func displayPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	path = filepath.Clean(path)
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return path
+	}
+	home = filepath.Clean(home)
+	switch {
+	case path == home:
+		return "~"
+	case strings.HasPrefix(path, home+string(filepath.Separator)):
+		return "~" + strings.TrimPrefix(path, home)
+	default:
+		return path
+	}
+}
+
+// shortenPath additionally elides deep paths so they fit pickers and status
+// lines.
 func shortenPath(path string) string {
 	if path == "" {
 		return "unknown directory"
 	}
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		if path == home {
-			return "~"
-		}
-		if strings.HasPrefix(path, home+string(filepath.Separator)) {
-			path = "~" + strings.TrimPrefix(path, home)
-		}
-	}
-	parts := strings.Split(path, string(filepath.Separator))
+	short := displayPath(path)
+	parts := strings.Split(short, string(filepath.Separator))
 	if len(parts) > 4 {
-		path = "…/" + strings.Join(parts[len(parts)-3:], "/")
+		short = "…/" + strings.Join(parts[len(parts)-3:], "/")
 	}
-	return path
+	return short
 }
 
 // humanTime renders a coarse relative timestamp.
