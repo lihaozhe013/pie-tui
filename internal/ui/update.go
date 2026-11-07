@@ -805,24 +805,65 @@ func (m *Model) openModelPicker() tea.Cmd {
 	}
 	items := make([]pickerItem, 0, len(m.models))
 	for _, model := range m.models {
+		if !m.modelEnabled(model) {
+			continue
+		}
 		detail := model.Name
 		if model.ContextWindow > 0 {
 			detail += fmt.Sprintf(" · %s ctx", formatTokens(model.ContextWindow))
 		}
+		if m.state.Model != nil && m.state.Model.ID == model.ID && m.state.Model.Provider == model.Provider {
+			detail += " · current"
+		}
 		items = append(items, pickerItem{Value: model.Label(), Label: model.Label(), Detail: detail})
+	}
+	if len(items) == 0 {
+		m.setToast("every model is disabled; enable one in settings")
+		return nil
 	}
 	m.openOverlay(newPickerOverlay("model", "Switch model", items))
 	return nil
+}
+
+// modelEnabled applies enabledModels to the session model picker. A missing
+// catalog keeps every model selectable rather than hiding all of them.
+func (m *Model) modelEnabled(model rpc.ModelInfo) bool {
+	if m.enabledModels == nil {
+		return true
+	}
+	on, known := m.enabledModels[model.Provider+"/"+model.ID]
+	if !known {
+		// A model pi reports that the file catalog does not know (an extension
+		// provider, or a fresh catalog) stays selectable.
+		return true
+	}
+	return on
+}
+
+// savedThinkingLevel returns the configured startup level for a model.
+func (m *Model) savedThinkingLevel(provider, id string) string {
+	if m.settings == nil {
+		return ""
+	}
+	levels, err := m.settings.ModelThinkingLevels()
+	if err != nil {
+		return ""
+	}
+	return levels[provider+"/"+id]
 }
 
 func (m *Model) setModelByLabel(label string) tea.Cmd {
 	for _, model := range m.models {
 		if model.Label() == label || model.ID == label {
 			client := m.client
+			level := m.savedThinkingLevel(model.Provider, model.ID)
 			return func() tea.Msg {
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
 				response, err := client.DoOK(ctx, rpc.SetModel(model.Provider, model.ID))
+				if err == nil && level != "" {
+					_, _ = client.DoOK(ctx, rpc.SetThinkingLevel(level))
+				}
 				return responseMsg{action: "model", resp: response, err: err}
 			}
 		}

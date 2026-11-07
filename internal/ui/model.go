@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/lihaozhe/pie-tui/internal/config"
+	"github.com/lihaozhe/pie-tui/internal/modelcatalog"
 	"github.com/lihaozhe/pie-tui/internal/rpc"
 	"github.com/lihaozhe/pie-tui/internal/session"
 )
@@ -37,6 +38,9 @@ type Options struct {
 	CWD string
 	// Version is displayed in the help overlay.
 	Version string
+	// PiBin is the resolved pi executable, used for catalog and package
+	// commands the client shells out to.
+	PiBin string
 }
 
 // Timing constants for the event loop.
@@ -182,13 +186,19 @@ type Model struct {
 	pendingPrompt     *block
 	pendingPromptText string
 
-	presetFile   *config.PresetFile
-	presetDraft  *presetDraft
-	toolSnapshot *toolSnapshot
-	logEntries   []session.LogEntry
-	selection    session.ToolSelection
-	hasSelection bool
-	currentMode  string
+	presetFile    *config.PresetFile
+	presetDraft   *presetDraft
+	toolSnapshot  *toolSnapshot
+	modelSettings *config.ModelSettings
+	modelsFile    *config.ModelsFile
+	catalog       *modelcatalog.Catalog
+	catalogErr    error
+	enabledModels map[string]bool
+	modelPins     map[string]string
+	logEntries    []session.LogEntry
+	selection     session.ToolSelection
+	hasSelection  bool
+	currentMode   string
 }
 
 // New builds the model around a connected client.
@@ -248,6 +258,64 @@ func (m *Model) reloadConfig() {
 		m.prefs = prefs
 	}
 	m.presetFile = config.LoadPresets(m.paths)
+	if modelSettings, err := config.LoadModelSettings(m.paths); err == nil {
+		m.modelSettings = modelSettings
+	}
+	if modelsFile, err := config.LoadModels(m.paths); err == nil {
+		m.modelsFile = modelsFile
+	}
+	m.reloadCatalog()
+}
+
+// reloadCatalog rebuilds the provider catalog and folds in the models the
+// running pi reported.
+func (m *Model) reloadCatalog() {
+	catalog, err := modelcatalog.Load(m.paths)
+	if err != nil {
+		m.catalogErr = err
+		m.catalog = nil
+		m.enabledModels = nil
+		return
+	}
+	runtime := make([]modelcatalog.Model, 0, len(m.models))
+	for _, info := range m.models {
+		runtime = append(runtime, modelcatalog.Model{
+			ProviderID:    info.Provider,
+			ID:            info.ID,
+			Name:          info.Name,
+			API:           info.API,
+			BaseURL:       info.BaseURL,
+			Reasoning:     info.Reasoning,
+			Input:         info.Input,
+			ContextWindow: info.ContextWindow,
+			MaxTokens:     info.MaxTokens,
+			Cost: modelcatalog.Cost{
+				Input:      info.Cost.Input,
+				Output:     info.Cost.Output,
+				CacheRead:  info.Cost.CacheRead,
+				CacheWrite: info.Cost.CacheWrite,
+			},
+		})
+	}
+	catalog.MergeRuntime(runtime)
+	m.catalog = catalog
+	m.catalogErr = nil
+	m.refreshEnabledModels()
+}
+
+// refreshEnabledModels recomputes the enabled/pin maps the settings rows read.
+func (m *Model) refreshEnabledModels() {
+	if m.catalog == nil || m.settings == nil {
+		m.enabledModels = nil
+		m.modelPins = nil
+		return
+	}
+	patterns, present, err := m.settings.EnabledModels()
+	if err != nil {
+		m.enabledModels = nil
+		return
+	}
+	m.enabledModels, m.modelPins, _ = modelcatalog.EnabledSet(patterns, present, m.catalog.Models())
 }
 
 // Init starts the event pump, the startup handshake, and the idle heartbeat.
@@ -434,6 +502,7 @@ func (m *Model) applyHandshake(msg handshakeMsg) (tea.Model, tea.Cmd) {
 	m.commands = msg.commands
 	m.stats = msg.stats
 	m.bridgeReady = m.hasPiCommand("pie-tools")
+	m.reloadCatalog()
 	m.completion.SetItems(m.commandItems())
 	m.loadHistory(msg.history)
 

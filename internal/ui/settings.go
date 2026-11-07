@@ -50,6 +50,7 @@ type settingsTab struct {
 type settingsState struct {
 	title  string
 	single bool
+	action string
 	tabs   []settingsTab
 	active int
 	row    int
@@ -73,6 +74,7 @@ func newSettingsPanel(title string, tabs []settingsTab) *settingsState {
 	return &settingsState{
 		title:  title,
 		single: len(tabs) <= 1,
+		action: "settings",
 		tabs:   tabs,
 		input:  input,
 	}
@@ -80,6 +82,11 @@ func newSettingsPanel(title string, tabs []settingsTab) *settingsState {
 
 // rebuild refreshes the rows from disk while keeping the selected tab and row.
 func (s *settingsState) rebuild(m *Model) {
+	if s.single {
+		// Sub-panels own their rows; rebuilding them from the main tab list
+		// would replace the panel under the user.
+		return
+	}
 	tabID := ""
 	rowID := ""
 	if s.active >= 0 && s.active < len(s.tabs) {
@@ -241,7 +248,11 @@ func (s *settingsState) View(st styles, width, height int) string {
 	}
 
 	lines := make([]string, 0, height)
-	title := st.overlayHead.Render(s.title) + st.overlayHint.Render("  ·  "+tab.Label)
+	titleText := s.title
+	if !s.single {
+		titleText += "  ·  " + tab.Label
+	}
+	title := st.overlayHead.Render(titleText)
 	lines = append(lines, padRight(title, innerWidth))
 	for i := 0; i < rowsHeight; i++ {
 		if s.single {
@@ -308,7 +319,11 @@ func (s *settingsState) renderRow(st styles, row settingsRow, selected bool, wid
 			value = "—"
 		}
 	case settingsAction:
-		value = "enter"
+		if row.Current != nil {
+			value = row.Current()
+		} else {
+			value = "enter"
+		}
 	}
 
 	if selected {
@@ -376,6 +391,9 @@ func (m *Model) handleSettingsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.overlay.action == "preset-editor" {
 			m.presetDraft = nil
 			return m, m.openSettingsAt("tools")
+		}
+		if m.overlay.action == "models-panel" {
+			return m, m.openSettingsAt("models")
 		}
 		m.closeOverlay()
 		return m, nil
@@ -513,7 +531,11 @@ func (m *Model) openSettingsOverlay() {
 	} else {
 		m.settingsPanel.rebuild(m)
 	}
-	m.openOverlay(&overlay{kind: overlaySettings, action: "settings", settings: m.settingsPanel})
+	action := m.settingsPanel.action
+	if action == "" {
+		action = "settings"
+	}
+	m.openOverlay(&overlay{kind: overlaySettings, action: action, settings: m.settingsPanel})
 }
 
 // editGlobalInstructions opens the multi-line editor over the settings panel.
@@ -542,7 +564,7 @@ func (m *Model) buildSettingsTabs() []settingsTab {
 		m.generalSettingsTab(),
 		m.instructionsSettingsTab(),
 		m.appearanceSettingsTab(),
-		placeholderTab("models", "Models", "Provider, model, reasoning, and endpoint settings will live here."),
+		m.modelsSettingsTab(),
 		m.toolsSettingsTab(),
 		placeholderTab("skills", "Skills", "Installed skills and their model-invocation switches will live here."),
 		placeholderTab("plugins", "Plugins", "Pi packages and their resources will live here."),

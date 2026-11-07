@@ -1,0 +1,61 @@
+package modelcatalog
+
+import (
+	"reflect"
+	"testing"
+)
+
+func testModels() []*Model {
+	return []*Model{
+		{ProviderID: "p", ID: "a"},
+		{ProviderID: "p", ID: "b"},
+		{ProviderID: "q", ID: "c"},
+	}
+}
+
+func TestEnabledSet(t *testing.T) {
+	t.Parallel()
+
+	models := testModels()
+	enabled, _, _ := EnabledSet(nil, false, models)
+	if len(enabled) != 3 {
+		t.Fatalf("all = %v", enabled)
+	}
+
+	enabled, pins, resolutions := EnabledSet([]string{"p/*", "q/c:high", "missing/*"}, true, models)
+	if !enabled["p/a"] || !enabled["p/b"] || !enabled["q/c"] {
+		t.Fatalf("enabled = %v", enabled)
+	}
+	if pins["q/c"] != "high" {
+		t.Fatalf("pins = %v", pins)
+	}
+	if stale := StalePatterns(resolutions); len(stale) != 1 || stale[0] != "missing/*" {
+		t.Fatalf("stale = %v", stale)
+	}
+}
+
+func TestSetEnabledEditsMinimally(t *testing.T) {
+	t.Parallel()
+
+	models := testModels()
+	patterns := []string{"p/*", "stale/*"}
+	next, set := SetEnabled(patterns, true, models, "p/a", false)
+	if !set || !reflect.DeepEqual(next, []string{"p/b", "stale/*"}) {
+		t.Fatalf("disable = %v", next)
+	}
+	next, _ = SetEnabled(next, true, models, "p/a", true)
+	if !reflect.DeepEqual(next, []string{"p/b", "stale/*", "p/a"}) {
+		t.Fatalf("enable = %v", next)
+	}
+
+	next, _ = SetEnabled(next, true, models, "p/b", false)
+	if !reflect.DeepEqual(next, []string{"stale/*", "p/a"}) {
+		t.Fatalf("second disable = %v", next)
+	}
+
+	// Turning everything off materializes every other model.
+	next, _ = SetEnabled(nil, false, models, "p/a", false)
+	if !reflect.DeepEqual(next, []string{"p/b", "q/c"}) {
+		t.Fatalf("materialize = %v", next)
+	}
+}

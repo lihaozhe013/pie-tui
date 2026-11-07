@@ -126,6 +126,17 @@ clients keeps its preset and its Plan mode. If the extension fails to load, the
 UI reports `unavailable` in Settings › General and refuses preset changes
 rather than silently diverging.
 
+Settings › Models merges three sources without a second cache:
+`models-store.json` (pi's catalog), `models.json` (custom providers, models,
+and model overrides), and `get_available_models` (what the running agent
+actually exposes). `internal/modelcatalog` owns the merge and the minimal-edit
+rules for `enabledModels`: turning one model off expands only the pattern that
+covers it, preserves `:thinking` pins, and never touches patterns that match
+nothing. Writes go through `internal/config`, so a provider or model added in
+the terminal appears in Pie and the reverse. The context-window cap in
+`pie-model-settings.json` is shared, but only Pie's server applies it to a
+runtime; the terminal client cannot re-clamp pi's in-process model list.
+
 ## Startup and shutdown
 
 1. Resolve `pi` (flag, environment, `PATH`). Missing binaries print install

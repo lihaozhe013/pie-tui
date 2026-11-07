@@ -114,6 +114,7 @@ func run(args []string, stderr io.Writer) int {
 		SessionDir: cfg.sessionDir,
 		CWD:        cwd,
 		Version:    version,
+		PiBin:      piBinary,
 	})
 
 	options := []tea.ProgramOption{

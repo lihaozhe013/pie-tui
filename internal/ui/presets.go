@@ -525,7 +525,13 @@ func (m *Model) presetTabs(draft *presetDraft) []settingsTab {
 
 func (m *Model) openPresetEditor(draft *presetDraft) {
 	m.presetDraft = draft
-	state := newSettingsPanel("Tool preset", m.presetTabs(draft))
+	name := strings.TrimSpace(draft.Preset.Name)
+	title := "New tool preset"
+	if !draft.IsNew {
+		title = "Tool preset: " + name
+	}
+	state := newSettingsPanel(title, m.presetTabs(draft))
+	state.action = "preset-editor"
 	m.settingsPanel = state
 	m.openOverlay(&overlay{kind: overlaySettings, action: "preset-editor", settings: state})
 }

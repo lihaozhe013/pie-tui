@@ -31,6 +31,10 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
 - Tool presets (`/preset`): the built-in configured, plan, chat-only,
   read-only, default, and full sets, plus custom presets stored in
   `pie-tool-presets.json` and editable from Settings › Tools
+- A Models tab that merges pi's catalog with `models.json`: context-window
+  limit, startup defaults, enabled-model patterns, per-model thinking levels,
+  provider credentials, and custom provider and model editors (including
+  compatibility endpoints, costs, and thinking maps)
 - Pie's 18 color themes, applied instantly and saved to the terminal-only
   preferences file
 - A bundled bridge extension (loaded with `-e`) that adds hot tool switching,

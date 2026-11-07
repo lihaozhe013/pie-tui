@@ -191,6 +191,9 @@ func newTestModel(t *testing.T) (*Model, *fakeClient) {
 	model := New(client, Options{Version: "test", CWD: "/work/dir"})
 	model, _ = step(t, model, tea.WindowSizeMsg{Width: 100, Height: 30})
 	model, _ = step(t, model, model.handshake()())
+	// The picker tests predate the settings layer; an isolated catalog keeps
+	// the developer's enabledModels from hiding the fake models.
+	model.enabledModels = nil
 	return model, client
 }
 
