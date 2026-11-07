@@ -28,16 +28,23 @@ type Entry struct {
 	CWD string
 	// Name is the display name from the newest session_info entry, if any.
 	Name string
+	// FirstMessage is the first user prompt, used as a label before a name
+	// exists, as Pie's session list does.
+	FirstMessage string
 	// Modified is the file modification time.
 	Modified time.Time
 	// Size is the file size in bytes.
 	Size int64
 }
 
-// Label renders a picker title: the session name, else a short ID.
+// Label renders a picker title: the session name, else the first prompt, else
+// a short ID.
 func (e Entry) Label() string {
 	if e.Name != "" {
 		return e.Name
+	}
+	if e.FirstMessage != "" {
+		return e.FirstMessage
 	}
 	if len(e.ID) >= 8 {
 		return "session " + e.ID[:8]
@@ -50,6 +57,8 @@ const (
 	DefaultDirEnv = "PI_CODING_AGENT_SESSION_DIR"
 	// headerLimit caps the header JSON we read from a session file.
 	headerLimit = 1 << 20
+	// firstMessageLimit bounds the prefix scanned for the first prompt.
+	firstMessageLimit = 64 << 10
 	// tailProbe bounds how much of the file we scan for the display name.
 	tailProbe = 64 << 10
 )
@@ -197,13 +206,82 @@ func readEntry(path string) (Entry, error) {
 	}
 
 	return Entry{
-		Path:     path,
-		ID:       head.ID,
-		CWD:      head.CWD,
-		Name:     readName(file, info.Size()),
-		Modified: info.ModTime(),
-		Size:     info.Size(),
+		Path:         path,
+		ID:           head.ID,
+		CWD:          head.CWD,
+		Name:         readName(file, info.Size()),
+		FirstMessage: readFirstMessage(file, info.Size()),
+		Modified:     info.ModTime(),
+		Size:         info.Size(),
 	}, nil
+}
+
+// readFirstMessage finds the first user prompt near the start of the file.
+// Reading a bounded prefix keeps a large session cheap to list.
+func readFirstMessage(file *os.File, size int64) string {
+	length := size
+	if length > firstMessageLimit {
+		length = firstMessageLimit
+	}
+	if length <= 0 {
+		return ""
+	}
+	buf := make([]byte, length)
+	if _, err := file.ReadAt(buf, 0); err != nil && !errors.Is(err, io.EOF) {
+		return ""
+	}
+	lines := strings.Split(string(buf), "\n")
+	for index, line := range lines {
+		if index == 0 || !strings.Contains(line, `"message"`) {
+			continue
+		}
+		var record struct {
+			Type    string `json:"type"`
+			Message struct {
+				Role    string          `json:"role"`
+				Content json.RawMessage `json:"content"`
+			} `json:"message"`
+		}
+		if err := json.Unmarshal([]byte(line), &record); err != nil || record.Type != "message" {
+			continue
+		}
+		if record.Message.Role != "user" {
+			continue
+		}
+		if text := messageText(record.Message.Content); text != "" {
+			return truncateLabel(text, 60)
+		}
+	}
+	return ""
+}
+
+func messageText(raw json.RawMessage) string {
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return strings.Join(strings.Fields(text), " ")
+	}
+	var blocks []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(raw, &blocks); err != nil {
+		return ""
+	}
+	var parts []string
+	for _, block := range blocks {
+		if block.Type == "text" && strings.TrimSpace(block.Text) != "" {
+			parts = append(parts, block.Text)
+		}
+	}
+	return strings.Join(strings.Fields(strings.Join(parts, " ")), " ")
+}
+
+func truncateLabel(text string, limit int) string {
+	runes := []rune(strings.TrimSpace(text))
+	if len(runes) <= limit {
+		return string(runes)
+	}
+	return strings.TrimSpace(string(runes[:limit-1])) + "…"
 }
 
 // readName scans the tail of the file for the newest session_info name. Names

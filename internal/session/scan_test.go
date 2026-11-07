@@ -3,6 +3,7 @@ package session
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -49,7 +50,7 @@ func TestListReadsHeadersAndSorts(t *testing.T) {
 	if entries[0].Name != "Refactor auth" || entries[0].Label() != "Refactor auth" {
 		t.Fatalf("name = %q label = %q", entries[0].Name, entries[0].Label())
 	}
-	if entries[1].Label() != "session aaaaaaaa" {
+	if entries[1].Label() != "hi" {
 		t.Fatalf("label = %q", entries[1].Label())
 	}
 	if entries[1].CWD != "/Users/me/proj" {
@@ -175,5 +176,24 @@ func TestListForCWDResolvesSymlinks(t *testing.T) {
 	resolved, _ := filepath.EvalSymlinks(real)
 	if projects[0].Path != resolved {
 		t.Fatalf("project path = %q, want %q", projects[0].Path, resolved)
+	}
+}
+
+func TestFirstMessageFromBlocksAndTruncation(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	long := "Explain what a monad is in two sentences, with a small example and no jargon at all."
+	extra := `{"type":"message","id":"m1","message":{"role":"user","content":[{"type":"text","text":"` + long + `"}]}}` + "\n"
+	writeSession(t, dir, "p", "a.jsonl", `{"type":"session","id":"aaaaaaaa-1111","cwd":"/work/one"}`+"\n", extra)
+	entries, err := List(dir, 10)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("entries = %+v err = %v", entries, err)
+	}
+	if !strings.HasPrefix(entries[0].FirstMessage, "Explain what a monad") || !strings.HasSuffix(entries[0].FirstMessage, "…") {
+		t.Fatalf("first message = %q", entries[0].FirstMessage)
+	}
+	if entries[0].Label() != entries[0].FirstMessage {
+		t.Fatalf("label = %q", entries[0].Label())
 	}
 }
