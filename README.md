@@ -46,6 +46,9 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   refuses filtered entries instead of silently dropping their filters
 - A statistics panel from `/stats` with message counts, a token breakdown,
   cost, context usage, and the session file, refreshed while it is open
+- A Context panel from `/context` fed by the bridge: the live tool list with
+  active state and descriptions, system-prompt size, work mode, and a pager
+  view of the prompt
 - Image attachments through `/image <path> [prompt]`: the file is read,
   base64-encoded, and sent with the prompt through pi's existing image support
 - Project switching with `/cwd [dir]`: a recent-project picker derived from
@@ -146,6 +149,7 @@ memory from other CLIs keeps working.
 | `/title` | | generate a title from the transcript with a one-shot model call |
 | `/cwd` | `/dir`, `/project` | switch working directory; no argument opens the project picker |
 | `/image` | | attach a local image to a prompt (`/image shot.png what is this?`) |
+| `/context` | `/tools-view` | system prompt and tool definitions published by the bridge |
 | `/goal` | | goal status and controls; arguments are forwarded to the goal package |
 | `/export` | | export the session as HTML |
 | `/stats` | `/status`, `/usage` | show the statistics panel (messages, tokens, cost, context) |

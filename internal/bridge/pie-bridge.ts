@@ -178,10 +178,12 @@ export default function (pi) {
         return;
       }
       const fs = await import("node:fs");
+      const activeTools = pi.getActiveTools();
+      const active = new Set(activeTools);
       const snapshot = {
         version: 1,
-        activeTools: pi.getActiveTools(),
-        tools: pi.getAllTools(),
+        activeTools,
+        tools: pi.getAllTools().map((tool) => ({ ...tool, active: active.has(tool.name) })),
         systemPrompt: ctx.getSystemPrompt(),
         workMode: readWorkMode(ctx.sessionManager.getEntries()) ?? null,
         toolSelection: readToolSelection(ctx.sessionManager.getEntries()) ?? null,

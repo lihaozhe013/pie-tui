@@ -126,6 +126,12 @@ clients keeps its preset and its Plan mode. If the extension fails to load, the
 UI reports `unavailable` in Settings › General and refuses preset changes
 rather than silently diverging.
 
+`/context` is fed by `/pie-publish`, not by the UI guessing: the bridge reads
+`getActiveTools`, `getAllTools`, `getSystemPrompt`, and the session's work mode,
+and marks each tool active at publish time. The panel lists the tools, offers
+the system prompt through `$PAGER`, and refreshes on demand. A leadership
+without the bridge shows why instead of an empty list.
+
 `/stats` is a small settings-style panel over the `get_session_stats` payload.
 It refreshes when the agent settles and when Refresh is pressed, and it shows
 the same numbers as the status bar so the two cannot disagree.

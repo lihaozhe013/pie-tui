@@ -221,11 +221,12 @@ type Model struct {
 	mcpSnapshot mcp.Snapshot
 	mcpChecked  bool
 
-	restarting    bool
-	pendingNotice string
-	projectList   []session.Project
-	browseDir     string
-	sessionsAll   bool
+	restarting     bool
+	pendingNotice  string
+	pendingContext bool
+	projectList    []session.Project
+	browseDir      string
+	sessionsAll    bool
 }
 
 // New builds the model around a connected client.
@@ -526,6 +527,28 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.overlay != nil && m.overlay.action == "goal" {
 			m.openGoalPanel()
 		}
+		return m, nil
+
+	case snapshotMsg:
+		if msg.err != nil {
+			if m.pendingContext {
+				m.pendingContext = false
+				m.addError("context: " + msg.err.Error())
+			}
+			return m, nil
+		}
+		m.toolSnapshot = &msg.snapshot
+		if m.pendingContext {
+			m.pendingContext = false
+			m.showContextPanel()
+		}
+		return m, nil
+
+	case contextViewMsg:
+		if msg.err != nil {
+			m.addError("view: " + msg.err.Error())
+		}
+		m.showContextPanel()
 		return m, nil
 
 	case projectsMsg:
