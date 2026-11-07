@@ -145,7 +145,10 @@ result resumes the session through the existing `switch_session` path.
 `getActiveTools`, `getAllTools`, `getSystemPrompt`, and the session's work mode,
 and marks each tool active at publish time. The panel lists the tools, offers
 the system prompt through `$PAGER`, and refreshes on demand. A leadership
-without the bridge shows why instead of an empty list.
+without the bridge shows why instead of an empty list. Tool presets and Plan
+mode refuse with the reason as well: the binary always embeds the bridge, and
+restarting without it would drop the current session instead of switching the
+tool set in place.
 
 `/stats` is a small settings-style panel over the `get_session_stats` payload.
 It refreshes when the agent settles and when Refresh is pressed, and it shows
