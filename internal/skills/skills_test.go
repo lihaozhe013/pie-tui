@@ -27,6 +27,7 @@ func TestLoadDiscoversPiLayouts(t *testing.T) {
 	root := t.TempDir()
 	agent := filepath.Join(root, "agent")
 	cwd := filepath.Join(root, "project")
+	t.Setenv("HOME", filepath.Join(root, "home"))
 
 	writeSkill(t, filepath.Join(agent, "skills", "alpha", "SKILL.md"), skillDoc("alpha", "First"))
 	writeSkill(t, filepath.Join(agent, "skills", "beta.md"), skillDoc("beta", "Second"))
@@ -65,6 +66,22 @@ func TestLoadDiscoversPiLayouts(t *testing.T) {
 	}
 	if len(diagnostics) == 0 {
 		t.Fatal("missing path diagnostic not reported")
+	}
+
+	packageDir := filepath.Join(agent, "npm", "node_modules", "pkg")
+	writeSkill(t, filepath.Join(packageDir, "skills", "pack", "SKILL.md"), skillDoc("pack", "From a package"))
+	if err := os.WriteFile(filepath.Join(packageDir, "package.json"), []byte(`{"name":"pkg","pi":{"skills":["./skills"]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	list, _ = Load(agent, cwd, nil)
+	foundPackage := false
+	for _, skill := range list {
+		if skill.Name == "pack" && skill.Scope == ScopePackage {
+			foundPackage = true
+		}
+	}
+	if !foundPackage {
+		t.Fatalf("package skill missing: %+v", list)
 	}
 
 	if err := SetDisabled(names["alpha"].FilePath, true); err != nil {

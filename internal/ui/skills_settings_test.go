@@ -13,6 +13,7 @@ func TestSkillsTabListsAndToggles(t *testing.T) {
 	root := t.TempDir()
 	agent := filepath.Join(root, "agent")
 	project := filepath.Join(root, "project")
+	t.Setenv("HOME", filepath.Join(root, "home"))
 	t.Setenv("PI_CODING_AGENT_DIR", agent)
 	path := filepath.Join(agent, "skills", "alpha", "SKILL.md")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

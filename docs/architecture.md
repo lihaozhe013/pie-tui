@@ -176,6 +176,13 @@ OAuth settings exactly as it does for the web panel. Connection state comes from
 Project files keep pi's trust rule at run time: the terminal writes them only
 for the folder the person opened.
 
+Code mode has one preference in `defaultTools` and one object in settings.
+"always" appends a single `+codemode` after dropping every entry that names
+codemode; "automatic" drops it and deletes the key when only modifiers would
+remain, so pi's defaults are not read as "no tools". `codemode.mode` and
+`codemode.inlineBudget` are edited in place, with "on" and a blank budget
+deleting the key because those are pi's defaults.
+
 Plugins are the `packages` array in `settings.json` and in the project's
 `.pi/settings.json`. A string entry is enabled; an object whose four resource
 lists are all empty is disabled. Disabling a filtered entry is refused because

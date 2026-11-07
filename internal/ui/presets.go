@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -339,6 +340,78 @@ func (m *Model) toolsSettingsTab() settingsTab {
 			return m.presetLabel(id) + " · " + presetToolsSummary(tools)
 		},
 	})
+
+	if m.settings != nil {
+		tab.Rows = append(tab.Rows,
+			settingsRow{
+				ID:    "codemode-preference",
+				Label: "Code mode",
+				Kind:  settingsChoice,
+				Help:  "Automatic activates codemode when an MCP server exposes codemode tools; Always starts every session with it.",
+				Current: func() string {
+					preference, err := m.settings.CodemodePreference()
+					if err != nil {
+						return "invalid"
+					}
+					return preference
+				},
+				Choices: []pickerItem{
+					{Value: "automatic", Label: "automatic", Detail: "activate on the first codemode server"},
+					{Value: "always", Label: "always", Detail: "start sessions with +codemode"},
+				},
+				Apply: m.settings.SetCodemodePreference,
+			},
+			settingsRow{
+				ID:    "codemode-mode",
+				Label: "Code mode tools",
+				Kind:  settingsChoice,
+				Help:  "On keeps the normal tools beside codemode; Only routes built-in tools through codemode.",
+				Current: func() string {
+					mode, err := m.settings.CodemodeMode()
+					if err != nil {
+						return "invalid"
+					}
+					return mode
+				},
+				Choices: []pickerItem{
+					{Value: "on", Label: "on", Detail: "codemode plus the built-in tools"},
+					{Value: "only", Label: "only", Detail: "codemode is the only coding tool"},
+				},
+				Apply: m.settings.SetCodemodeMode,
+			},
+			settingsRow{
+				ID:    "codemode-budget",
+				Label: "Inline result budget",
+				Kind:  settingsText,
+				Help:  "Characters of a codemode result returned inline; blank uses pi's default.",
+				Current: func() string {
+					budget, ok, err := m.settings.CodemodeInlineBudget()
+					if err != nil || !ok {
+						return "default"
+					}
+					return fmt.Sprintf("%d", budget)
+				},
+				EditValue: func() string {
+					budget, ok, err := m.settings.CodemodeInlineBudget()
+					if err != nil || !ok {
+						return ""
+					}
+					return fmt.Sprintf("%d", budget)
+				},
+				Apply: func(value string) error {
+					value = strings.TrimSpace(value)
+					if value == "" || strings.EqualFold(value, "default") {
+						return m.settings.SetCodemodeInlineBudget(nil)
+					}
+					budget, err := strconv.Atoi(value)
+					if err != nil || budget < 0 || budget > config.CodemodeInlineBudgetMax {
+						return fmt.Errorf("budget must be 0..%d", config.CodemodeInlineBudgetMax)
+					}
+					return m.settings.SetCodemodeInlineBudget(&budget)
+				},
+			},
+		)
+	}
 
 	if m.presetFile != nil && m.presetFile.Invalid() != nil {
 		tab.Rows = append(tab.Rows, settingsRow{

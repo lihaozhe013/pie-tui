@@ -35,7 +35,11 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   limit, startup defaults, enabled-model patterns, per-model thinking levels,
   provider credentials, and custom provider and model editors (including
   compatibility endpoints, costs, and thinking maps)
-- A Skills tab that discovers the agent, project, and settings paths with
+- Code mode controls in Settings › Tools: automatic or always-on (writes
+  `+codemode` to `defaultTools` minimally), the `codemode.mode` choice, and the
+  inline result budget
+- A Skills tab that discovers the agent, project, settings, `~/.agents/skills`,
+  and installed-package paths with
   pi's layout rules, shows model-invocation state, toggles
   `disable-model-invocation` in the frontmatter, opens the skill file in
   `$VISUAL`/`$EDITOR`, and searches or installs from skills.sh with the

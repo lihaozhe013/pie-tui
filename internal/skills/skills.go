@@ -21,6 +21,7 @@ const (
 	ScopeGlobal  = "global"
 	ScopeProject = "project"
 	ScopePath    = "path"
+	ScopePackage = "package"
 )
 
 // Skill is one loaded SKILL.md or standalone markdown skill.
@@ -73,7 +74,13 @@ func Load(agentDir, cwd string, extraPaths []string) ([]Skill, []Diagnostic) {
 	}
 
 	add(scanDir(filepath.Join(agentDir, "skills"), ScopeGlobal))
+	if home, err := os.UserHomeDir(); err == nil {
+		// The skills CLI's global store; pi sees it through symlinks, but the
+		// web panel also lists it directly so a broken link stays visible.
+		add(scanDir(filepath.Join(home, ".agents", "skills"), ScopeGlobal))
+	}
 	add(scanDir(filepath.Join(cwd, ".pi", "skills"), ScopeProject))
+	add(scanPackageSkills(agentDir))
 	for _, raw := range extraPaths {
 		path := raw
 		if !filepath.IsAbs(path) {
@@ -158,6 +165,71 @@ func scanDir(dir, scope string) ([]Skill, []Diagnostic) {
 			found = append(found, skill)
 		}
 	}
+	return found, diagnostics
+}
+
+// scanPackageSkills finds skills a pi package ships in its manifest's
+// `pi.skills` list. Installed npm packages live under <agent>/npm/node_modules.
+func scanPackageSkills(agentDir string) ([]Skill, []Diagnostic) {
+	root := filepath.Join(agentDir, "npm", "node_modules")
+	if _, err := os.ReadDir(root); err != nil {
+		return nil, nil
+	}
+	var found []Skill
+	var diagnostics []Diagnostic
+	var visit func(dir string)
+	visit = func(dir string) {
+		manifestPath := filepath.Join(dir, "package.json")
+		data, err := os.ReadFile(manifestPath)
+		if err != nil {
+			return
+		}
+		var manifest struct {
+			Pi struct {
+				Skills []string `json:"skills"`
+			} `json:"pi"`
+		}
+		if err := json.Unmarshal(data, &manifest); err != nil {
+			return
+		}
+		for _, raw := range manifest.Pi.Skills {
+			path := raw
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(dir, strings.TrimPrefix(path, "./"))
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				diagnostics = append(diagnostics, Diagnostic{Path: path, Message: "package skill path does not exist"})
+				continue
+			}
+			if info.IsDir() {
+				children, childDiagnostics := scanDir(path, ScopePackage)
+				found = append(found, children...)
+				diagnostics = append(diagnostics, childDiagnostics...)
+			} else if skill, ok := loadFile(path, ScopePackage); ok {
+				found = append(found, skill)
+			}
+		}
+	}
+	var walk func(dir string)
+	walk = func(dir string) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			path := filepath.Join(dir, entry.Name())
+			if strings.HasPrefix(entry.Name(), "@") {
+				walk(path)
+				continue
+			}
+			visit(path)
+		}
+	}
+	walk(root)
 	return found, diagnostics
 }
 
