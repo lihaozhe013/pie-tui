@@ -19,8 +19,25 @@ func TestCompletionFiltersByPrefix(t *testing.T) {
 	}
 
 	list.Refresh("/mo")
-	if !list.visible || len(list.filtered) != 1 || list.filtered[0].Value != "/model" {
+	if !list.visible || len(list.filtered) != 2 {
 		t.Fatalf("filtered = %+v", list.filtered)
+	}
+	if list.filtered[0].Value != "/model" || list.filtered[1].Value != "/models" {
+		t.Fatalf("canonical name must sort before its alias, got %+v", list.filtered)
+	}
+
+	list.Refresh("/ex")
+	if !list.visible {
+		t.Fatal("alias must be reachable from the popup")
+	}
+	var exit completionItem
+	for _, item := range list.filtered {
+		if item.Value == "/exit" {
+			exit = item
+		}
+	}
+	if exit.Alias != "/quit" {
+		t.Fatalf("aliases must be reachable from the popup, got %+v", list.filtered)
 	}
 
 	list.Refresh("/fix")

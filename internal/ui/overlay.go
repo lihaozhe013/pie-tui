@@ -261,11 +261,15 @@ func (o *overlay) renderPicker(body *strings.Builder, st styles) {
 		if label == "" {
 			label = item.Value
 		}
+		var line string
 		if i == o.cursor {
-			body.WriteString(st.pickerSel.Render("\u203a "+label) + "  " + st.overlayHint.Render(item.Detail))
+			line = st.pickerSel.Render("\u203a "+label) + "  " + st.overlayHint.Render(item.Detail)
 		} else {
-			body.WriteString("  " + st.pickerItem.Render(label) + "  " + st.overlayHint.Render(item.Detail))
+			line = "  " + st.pickerItem.Render(label) + "  " + st.overlayHint.Render(item.Detail)
 		}
+		// Truncate before lipgloss pads the box: an overlong row would widen
+		// the border and break the frame width on small terminals.
+		body.WriteString(truncateLine(line, o.width-4))
 		if i != end-1 {
 			body.WriteString("\n")
 		}

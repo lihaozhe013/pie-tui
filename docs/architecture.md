@@ -77,6 +77,8 @@ the resume picker.
   scroll the alternate screen and hide the header.
 - `update.go` — protocol events to UI state, key routing, slash commands, and the
   command helpers that call pi.
+- `commands.go` — the client-side command table: canonical names, aliases, and
+  the alias-to-command index shared by dispatch and completion.
 - `viewport.go` — transcript blocks, scrolling, and incremental markdown.
 - `input.go` — multi-line composer, prompt history, and slash completion.
 - `overlay.go` — pickers and extension dialogs.

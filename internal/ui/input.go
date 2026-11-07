@@ -141,6 +141,7 @@ type completionItem struct {
 	Detail  string // one-line description
 	Kind    string // builtin, extension, prompt, skill
 	Builtin bool
+	Alias   string // canonical name when Value is an alias, e.g. "/model"
 }
 
 // completion is the slash command popup state.
@@ -175,12 +176,7 @@ func (c *completion) Refresh(input string) {
 		}
 	}
 	sort.SliceStable(c.filtered, func(i, j int) bool {
-		iPrefix := strings.HasPrefix(strings.ToLower(c.filtered[i].Value), prefix)
-		jPrefix := strings.HasPrefix(strings.ToLower(c.filtered[j].Value), prefix)
-		if iPrefix != jPrefix {
-			return iPrefix
-		}
-		return c.filtered[i].Value < c.filtered[j].Value
+		return completionLess(c.filtered[i], c.filtered[j], prefix)
 	})
 	if c.cursor >= len(c.filtered) {
 		c.cursor = maxInt(0, len(c.filtered)-1)
@@ -189,6 +185,25 @@ func (c *completion) Refresh(input string) {
 }
 
 func (c *completion) Hide() { c.visible = false }
+
+// completionLess ranks candidates: an exact name beats a prefix match, a prefix
+// match beats a substring match, and canonical commands precede their aliases so
+// the popup does not open on an alias.
+func completionLess(a, b completionItem, prefix string) bool {
+	aValue, bValue := strings.ToLower(a.Value), strings.ToLower(b.Value)
+	if (aValue == prefix) != (bValue == prefix) {
+		return aValue == prefix
+	}
+	aPrefix := strings.HasPrefix(aValue, prefix)
+	bPrefix := strings.HasPrefix(bValue, prefix)
+	if aPrefix != bPrefix {
+		return aPrefix
+	}
+	if (a.Alias != "") != (b.Alias != "") {
+		return a.Alias == ""
+	}
+	return a.Value < b.Value
+}
 
 func (c *completion) Move(delta int) {
 	if len(c.filtered) == 0 {
@@ -205,21 +220,4 @@ func (c *completion) Selected() (completionItem, bool) {
 		c.cursor = len(c.filtered) - 1
 	}
 	return c.filtered[c.cursor], true
-}
-
-// builtinCommands are handled inside the client instead of pi.
-func builtinCommands() []completionItem {
-	return []completionItem{
-		{Value: "/model", Detail: "switch model", Kind: "builtin", Builtin: true},
-		{Value: "/think", Detail: "cycle thinking level", Kind: "builtin", Builtin: true},
-		{Value: "/new", Detail: "start a new session", Kind: "builtin", Builtin: true},
-		{Value: "/resume", Detail: "resume another session", Kind: "builtin", Builtin: true},
-		{Value: "/compact", Detail: "compact the conversation", Kind: "builtin", Builtin: true},
-		{Value: "/name", Detail: "rename this session", Kind: "builtin", Builtin: true},
-		{Value: "/export", Detail: "export the session as HTML", Kind: "builtin", Builtin: true},
-		{Value: "/stats", Detail: "show token and context usage", Kind: "builtin", Builtin: true},
-		{Value: "/clear", Detail: "clear the scrollback", Kind: "builtin", Builtin: true},
-		{Value: "/help", Detail: "show key bindings", Kind: "builtin", Builtin: true},
-		{Value: "/quit", Detail: "exit pie-tui", Kind: "builtin", Builtin: true},
-	}
 }

@@ -359,12 +359,18 @@ func (m *Model) applyHandshake(msg handshakeMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// commandItems merges built-ins with the commands pi reported.
+// commandItems merges built-ins with the commands pi reported. A built-in alias
+// that pi also uses is dropped: runSlash forwards that name to pi, so listing it
+// as a client-side command would be a lie.
 func (m *Model) commandItems() []completionItem {
-	items := builtinCommands()
-	seen := make(map[string]bool, len(items))
-	for _, item := range items {
+	items := make([]completionItem, 0, len(builtinCommandTable)*2)
+	seen := make(map[string]bool, len(builtinCommandTable)*2)
+	for _, item := range builtinCommands() {
+		if item.Alias != "" && m.piOwns(item.Value) {
+			continue
+		}
 		seen[item.Value] = true
+		items = append(items, item)
 	}
 	for _, command := range m.commands {
 		value := "/" + command.Name

@@ -585,13 +585,21 @@ func (m *Model) abort() tea.Cmd {
 
 // runSlash executes a client-side command. It reports false when the text is a
 // pi command (extension, prompt template, skill) that must be forwarded.
+//
+// Canonical names always resolve locally. An alias yields to pi when pi
+// advertised the same name, so personal commands keep working.
 func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 	fields := strings.Fields(text)
 	name := fields[0]
 	argument := strings.TrimSpace(strings.TrimPrefix(text, name))
 
-	switch name {
-	case "/quit", "/exit":
+	target, known := builtinIndex[name]
+	if !known || (target.alias && m.piOwns(name)) {
+		return nil, false
+	}
+
+	switch target.name {
+	case "/quit":
 		return tea.Quit, true
 	case "/clear":
 		m.transcript.Clear()
@@ -657,8 +665,12 @@ func (m *Model) helpItems() []pickerItem {
 	for _, binding := range bindings {
 		items = append(items, pickerItem{Value: binding[0], Label: binding[0], Detail: binding[1]})
 	}
-	for _, command := range builtinCommands() {
-		items = append(items, pickerItem{Value: command.Value, Label: command.Value, Detail: command.Detail})
+	for _, command := range builtinCommandTable {
+		detail := command.Detail
+		if len(command.Aliases) > 0 {
+			detail += "  (aliases: " + strings.Join(command.Aliases, ", ") + ")"
+		}
+		items = append(items, pickerItem{Value: command.Name, Label: command.Name, Detail: detail})
 	}
 	return items
 }

@@ -78,12 +78,27 @@ Flags are forwarded to pi where they overlap (`--provider`, `--model`, `--name`,
 
 ## Slash commands
 
-Client-side: `/model`, `/think`, `/new`, `/resume`, `/compact`, `/name`, `/export`,
-`/stats`, `/clear`, `/help`, `/quit`.
+Each client-side command also answers to the aliases listed below, so muscle
+memory from other CLIs keeps working.
+
+| Command | Aliases | Description |
+|---|---|---|
+| `/model` | `/models` | switch model |
+| `/think` | | cycle the thinking level |
+| `/new` | | start a new session |
+| `/resume` | `/continue`, `/sessions` | resume another session |
+| `/compact` | `/compress` | compact the conversation |
+| `/name` | `/rename`, `/title` | rename this session |
+| `/export` | | export the session as HTML |
+| `/stats` | `/status`, `/usage` | show token and context usage |
+| `/clear` | `/cls` | clear the scrollback |
+| `/help` | `/keys` | show key bindings and commands |
+| `/quit` | `/exit`, `/q` | exit pie-tui |
 
 Anything else starting with `/` is forwarded to pi unchanged, so extension
 commands, prompt templates, and skills (`/skill:name`) work as they do in the
-native TUI.
+native TUI. Aliases never take precedence over pi: if pi advertises a command
+with the same name, that name is forwarded instead of being treated as an alias.
 
 ## Design notes
 
