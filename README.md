@@ -64,11 +64,14 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
 - Plan mode shows a `plan` chip in the header and a "writes blocked" hint;
   project MCP and package writes follow pi's `trust.json`, inherited from a
   parent folder, and refuse to edit untrusted project resources
-- An unnamed session is titled automatically after its first settled turn and
-  when it is resumed or attached; the generation runs as a one-shot background
-  `pi --print` and writes the name through `set_session_name`. The resume
+- An unnamed session is titled automatically from its first accepted prompt,
+  with retries when the first turn settles (even if it was aborted), and from
+  history when it is resumed, attached, forked, or cloned. The generation runs
+  as a one-shot background `pi --print` and writes the name through
+  `set_session_name`, the same `session_info` record the Web UI reads. A running
+  TUI watches the session file for titles written by the Web UI, and the resume
   picker reads the newest name even when a long conversation pushed it far from
-  the end of the session file. Failures stay out of the transcript
+  the end of the file. Failures stay out of the transcript
 - Branch tools: `/fork` lists forkable user messages and restores the chosen
   prompt to the editor, `/clone` duplicates the branch, and `/tree` prints the
   session tree with the current leaf marked

@@ -5,6 +5,7 @@ package session
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,6 +62,10 @@ const (
 	firstMessageLimit = 64 << 10
 	// nameChunk is the backward read size used to find the newest name.
 	nameChunk = 64 << 10
+	// NamePartialLimit bounds the incomplete line retained between incremental
+	// name-watch reads. A session_info record is short; this only protects
+	// against a huge message line.
+	NamePartialLimit = 64 << 10
 )
 
 // Dir resolves the session directory. Precedence matches pi: explicit
@@ -284,14 +289,38 @@ func truncateLabel(text string, limit int) string {
 	return strings.TrimSpace(string(runes[:limit-1])) + "…"
 }
 
+// ParseNameChunk returns the newest session_info name among the complete
+// lines in data. The bytes after the last newline are returned as partial so
+// an incremental caller can prepend them to the next read. found is false
+// when the chunk held no session_info record.
+func ParseNameChunk(data []byte) (name string, found bool, partial []byte) {
+	last := bytes.LastIndexByte(data, '\n')
+	if last < 0 {
+		return "", false, append([]byte(nil), data...)
+	}
+	for _, line := range strings.Split(string(data[:last]), "\n") {
+		if value, ok := parseSessionNameLine(line); ok {
+			name, found = value, true
+		}
+	}
+	return name, found, append([]byte(nil), data[last+1:]...)
+}
+
 // readName finds the newest session_info entry by reading the file backwards
 // in chunks. A fixed tail probe is not enough: an auto-generated name is
 // written early in a session, and a long conversation can push it megabytes
 // away from the end. Scanning stops at the first entry found, so the common
 // case only reads one chunk.
 func readName(file *os.File, size int64) string {
+	name, _ := readNameFound(file, size)
+	return name
+}
+
+// readNameFound is readName with a found flag: an absent name and a deliberate
+// clear both return an empty string, but only the clear is a match.
+func readNameFound(file *os.File, size int64) (string, bool) {
 	if size <= 0 {
-		return ""
+		return "", false
 	}
 
 	var pending []byte
@@ -304,7 +333,7 @@ func readName(file *os.File, size int64) string {
 		offset -= n
 		buf := make([]byte, n)
 		if _, err := file.ReadAt(buf, offset); err != nil && !errors.Is(err, io.EOF) {
-			return ""
+			return "", false
 		}
 
 		data := buf
@@ -319,7 +348,7 @@ func readName(file *os.File, size int64) string {
 		}
 		for i := len(lines) - 1; i >= start; i-- {
 			if name, ok := parseSessionNameLine(lines[i]); ok {
-				return name
+				return name, true
 			}
 		}
 		if offset > 0 {
@@ -328,7 +357,24 @@ func readName(file *os.File, size int64) string {
 			pending = nil
 		}
 	}
-	return ""
+	return "", false
+}
+
+// LatestName reads the newest session_info name from path and reports the file
+// size that was scanned, so a caller can continue incrementally from there.
+// A found record with an empty name is a deliberate clear.
+func LatestName(path string) (name string, found bool, size int64, err error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", false, 0, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return "", false, 0, err
+	}
+	name, found = readNameFound(file, info.Size())
+	return name, found, info.Size(), nil
 }
 
 // parseSessionNameLine parses one JSONL record and reports whether it is a

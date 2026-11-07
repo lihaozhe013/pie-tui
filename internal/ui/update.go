@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -57,13 +58,15 @@ func (m *Model) handleEvent(event rpc.Event) (tea.Model, tea.Cmd) {
 		m.finishStream()
 		m.transcript.MarkDirty()
 		commands := []tea.Cmd{m.waitEvent(), m.refreshStats()}
-		if m.autoTitlePending {
-			if m.state.SessionName != "" {
-				m.autoTitlePending = false
-			} else if !ev.Aborted && !m.titleRunning {
-				m.autoTitlePending = false
-				requestID := m.beginTitleRequest()
-				commands = append(commands, m.generateTitleCommandWithMessages(nil, true, requestID))
+		if m.state.SessionName != "" {
+			m.autoTitlePending = false
+			m.autoTitleAttempts = 0
+		} else if !m.titleRunning {
+			// A new session deserves a title even when its first turn was a
+			// slash command, was aborted, or the immediate request failed.
+			m.autoTitlePending = false
+			if cmd := m.startAutoTitle(nil); cmd != nil {
+				commands = append(commands, cmd)
 			}
 		}
 		return m, tea.Batch(commands...)
@@ -108,9 +111,11 @@ func (m *Model) handleEvent(event rpc.Event) (tea.Model, tea.Cmd) {
 		return m, m.waitEvent()
 
 	case *rpc.SessionInfoChangedEvent:
-		m.state.SessionName = ev.Name
+		m.noteSessionName(ev.Name)
 		// A name set by the user or another client invalidates an in-flight
 		// title, which must not overwrite it.
+		m.autoTitlePending = false
+		m.autoTitleAttempts = 0
 		m.sessionEpoch.Add(1)
 		return m, m.waitEvent()
 
@@ -744,6 +749,9 @@ func (m *Model) dispatchCommand(text string) tea.Cmd {
 	}
 
 	if m.state.SessionName == "" {
+		if m.autoTitleAttempts >= maxAutoTitleAttempts {
+			m.autoTitleAttempts = 0
+		}
 		m.autoTitlePending = true
 	}
 	userBlock := newBlock(blockUser, text)
@@ -1222,14 +1230,167 @@ func (m *Model) hasTitleHistory(messages []rpc.Message) bool {
 }
 
 // autoTitleFromHistory starts a best-effort title request for a resumed or
-// attached unnamed session. It returns nil when the session already has a
-// name, another request is running, or there is nothing to title.
+// attached unnamed session.
 func (m *Model) autoTitleFromHistory(messages []rpc.Message) tea.Cmd {
-	if m.state.SessionName != "" || m.titleRunning || !m.hasTitleHistory(messages) {
+	return m.startAutoTitle(messages)
+}
+
+// startAutoTitle starts one automatic title request. It returns nil when the
+// session is named, a request is already running, the attempt budget is spent,
+// or a supplied history has nothing to name.
+func (m *Model) startAutoTitle(messages []rpc.Message) tea.Cmd {
+	if m.state.SessionName != "" || m.nameWatchValid || m.titleRunning || m.autoTitleAttempts >= maxAutoTitleAttempts {
 		return nil
 	}
+	if messages != nil && !m.hasTitleHistory(messages) {
+		return nil
+	}
+	m.autoTitleAttempts++
+	m.autoTitlePending = true
 	requestID := m.beginTitleRequest()
 	return m.generateTitleCommandWithMessages(messages, true, requestID)
+}
+
+// noteSessionName records a title learned from pi, this client, or the session
+// file. It also updates an open resume picker so the row stops showing the
+// first prompt as soon as a title exists.
+func (m *Model) noteSessionName(name string) {
+	m.nameWatchSeq++
+	m.nameWatchName = name
+	m.nameWatchValid = true
+	m.nameWatchPath = m.state.SessionFile
+	m.state.SessionName = name
+	if name == "" {
+		return
+	}
+	m.autoTitlePending = false
+	m.autoTitleAttempts = 0
+	if o := m.overlay; o != nil && o.action == "session" {
+		changed := false
+		for i := range o.items {
+			if o.items[i].Value == m.state.SessionFile {
+				o.items[i].Label = name
+				changed = true
+			}
+		}
+		if changed {
+			o.refilter()
+		}
+	}
+}
+
+// resetSessionNameWatch makes the next heartbeat seed the name watcher from
+// the current session file instead of carrying offsets across sessions.
+func (m *Model) resetSessionNameWatch() {
+	m.nameWatchSeq++
+	m.nameWatchPath = ""
+	m.nameWatchOffset = 0
+	m.nameWatchPartial = nil
+	m.nameWatchName = ""
+	m.nameWatchValid = false
+	m.namePollPending = false
+	m.namePollAt = time.Time{}
+}
+
+// pollSessionName reads appended session records and reports a session_info
+// written by another client, such as the Web UI. Reading only new bytes keeps
+// long sessions cheap to watch.
+func (m *Model) pollSessionName() tea.Cmd {
+	path := m.state.SessionFile
+	if path == "" || m.namePollPending || time.Since(m.namePollAt) < externalNamePollInterval {
+		return nil
+	}
+	m.namePollPending = true
+	m.namePollAt = time.Now()
+	sessionID := m.state.SessionID
+	first := m.nameWatchPath != path
+	offset := m.nameWatchOffset
+	partial := append([]byte(nil), m.nameWatchPartial...)
+	if first {
+		offset = 0
+		partial = nil
+	}
+	m.namePollID++
+	pollID := m.namePollID
+	watchSeq := m.nameWatchSeq
+
+	return func() tea.Msg {
+		if first {
+			// Seed from the newest record in the whole file, not just a tail
+			// window: a clear or a title can sit megabytes from the end.
+			name, found, size, err := session.LatestName(path)
+			if err != nil {
+				return sessionNameMsg{sessionID: sessionID, pollID: pollID, watchSeq: watchSeq, path: path, err: err}
+			}
+			return sessionNameMsg{
+				sessionID: sessionID,
+				pollID:    pollID,
+				watchSeq:  watchSeq,
+				path:      path,
+				name:      name,
+				found:     found,
+				offset:    size,
+			}
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			return sessionNameMsg{sessionID: sessionID, pollID: pollID, watchSeq: watchSeq, path: path, err: err}
+		}
+		defer file.Close()
+		info, err := file.Stat()
+		if err != nil {
+			return sessionNameMsg{sessionID: sessionID, pollID: pollID, watchSeq: watchSeq, path: path, err: err}
+		}
+		size := info.Size()
+		start := offset
+		if size < start {
+			start = 0
+			partial = nil
+		}
+		if size <= start {
+			return sessionNameMsg{sessionID: sessionID, pollID: pollID, watchSeq: watchSeq, path: path, offset: size, partial: partial}
+		}
+		if size-start > maxSessionNameRead {
+			// A suspended client can wake up megabytes behind. Scan for the
+			// newest title instead of allocating the whole gap, and resume
+			// incrementally from the size that scan covered.
+			name, found, scanned, err := session.LatestName(path)
+			if err != nil {
+				return sessionNameMsg{sessionID: sessionID, pollID: pollID, watchSeq: watchSeq, path: path, err: err}
+			}
+			return sessionNameMsg{
+				sessionID: sessionID,
+				pollID:    pollID,
+				watchSeq:  watchSeq,
+				path:      path,
+				name:      name,
+				found:     found,
+				offset:    scanned,
+			}
+		}
+
+		buf := make([]byte, size-start)
+		if _, err := file.ReadAt(buf, start); err != nil {
+			return sessionNameMsg{sessionID: sessionID, pollID: pollID, watchSeq: watchSeq, path: path, err: err}
+		}
+		name, found, rest := session.ParseNameChunk(append(partial, buf...))
+		if len(rest) > session.NamePartialLimit {
+			// Only a pathological single line grows this far; a session_info
+			// record is short, so dropping it cannot lose a title.
+			rest = nil
+		}
+		return sessionNameMsg{
+			sessionID: sessionID,
+			pollID:    pollID,
+			watchSeq:  watchSeq,
+			path:      path,
+			name:      name,
+			found:     found,
+			offset:    size,
+			partial:   rest,
+		}
+	}
 }
 
 func (m *Model) generateTitleCommandWithMessages(messages []rpc.Message, silent bool, requestID uint64) tea.Cmd {
@@ -1237,6 +1398,7 @@ func (m *Model) generateTitleCommandWithMessages(messages []rpc.Message, silent 
 	bin := m.opts.PiBin
 	model := m.state.Model
 	sessionID := m.state.SessionID
+	sessionFile := m.state.SessionFile
 	epoch := m.sessionEpoch.Load()
 	level := "off"
 	modelRef := ""
@@ -1284,6 +1446,34 @@ func (m *Model) generateTitleCommandWithMessages(messages []rpc.Message, silent 
 		if m.sessionEpoch.Load() != epoch {
 			return result(titleMsg{err: errors.New("session changed or renamed while generating title"), silent: silent})
 		}
+		if silent {
+			// Another client may have named the session while the model was
+			// working. Its title wins; do not append a second session_info.
+			if sessionFile != "" {
+				if existing, found, _, readErr := session.LatestName(sessionFile); readErr == nil && found {
+					// A regular title means another client won; an empty
+					// session_info is a deliberate clear and must not be
+					// resurrected by a stale in-memory name.
+					return result(titleMsg{title: existing, silent: true})
+				}
+			}
+			stateCtx, stateCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			stateResponse, stateErr := client.DoOK(stateCtx, rpc.GetState())
+			stateCancel()
+			if stateErr == nil {
+				if state, decodeErr := rpc.DecodeTyped[rpc.State](stateResponse); decodeErr == nil {
+					if state.SessionID != "" && state.SessionID != sessionID {
+						return result(titleMsg{err: errors.New("session changed while generating title"), silent: true})
+					}
+					if state.SessionName != "" {
+						return result(titleMsg{title: state.SessionName, silent: true})
+					}
+				}
+			}
+		}
+		if m.sessionEpoch.Load() != epoch {
+			return result(titleMsg{err: errors.New("session changed or renamed while generating title"), silent: silent})
+		}
 
 		setCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
@@ -1295,6 +1485,12 @@ func (m *Model) generateTitleCommandWithMessages(messages []rpc.Message, silent 
 func (m *Model) setSessionName(name string) tea.Cmd {
 	m.sessionEpoch.Add(1)
 	m.invalidateTitle()
+	m.autoTitlePending = false
+	m.autoTitleAttempts = 0
+	m.nameWatchSeq++
+	m.nameWatchName = name
+	m.nameWatchValid = true
+	m.nameWatchPath = m.state.SessionFile
 	client := m.client
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -1307,6 +1503,10 @@ func (m *Model) setSessionName(name string) tea.Cmd {
 // applyResponse folds a command result into the UI.
 func (m *Model) applyResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
+		if msg.action == "name" {
+			m.nameWatchValid = false
+			m.nameWatchName = ""
+		}
 		m.addError(msg.err.Error())
 		if msg.action == "prompt" {
 			m.busy = false
@@ -1324,6 +1524,16 @@ func (m *Model) applyResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 		}
 		if response != nil {
 			_ = response.DecodeData(&payload)
+		}
+		var titleCmd tea.Cmd
+		if payload.Disposition != "handled" && m.state.SessionName == "" && m.state.MessageCount == 0 &&
+			!m.titleRunning && strings.TrimSpace(m.pendingPromptText) != "" {
+			// Name a brand-new session from the first accepted prompt instead
+			// of waiting for a long turn to settle.
+			titleCmd = m.startAutoTitle([]rpc.Message{{
+				Role:    "user",
+				Content: rpc.Content{{Type: "text", Text: m.pendingPromptText}},
+			}})
 		}
 		switch payload.Disposition {
 		case "queued":
@@ -1344,6 +1554,7 @@ func (m *Model) applyResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 			m.pendingPrompt = nil
 			m.pendingPromptText = ""
 		}
+		return m, titleCmd
 
 	case "model":
 		if model, err := rpc.DecodeTyped[rpc.ModelInfo](response); err == nil && model.ID != "" {
@@ -1374,8 +1585,12 @@ func (m *Model) applyResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 		m.sessionEpoch.Add(1)
 		m.transcript.Clear()
 		m.autoTitlePending = false
+		m.autoTitleAttempts = 0
+		m.resetSessionNameWatch()
 		m.invalidateTitle()
 		m.state.SessionName = ""
+		m.state.SessionFile = ""
+		m.state.SessionID = ""
 		// The entries and the refreshed state race; a new session has no
 		// messages, so the saved preset must not read the old count.
 		m.state.MessageCount = 0
@@ -1390,7 +1605,12 @@ func (m *Model) applyResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 		m.sessionEpoch.Add(1)
 		m.transcript.Clear()
 		m.autoTitlePending = false
+		m.autoTitleAttempts = 0
+		m.resetSessionNameWatch()
 		m.invalidateTitle()
+		m.state.SessionName = ""
+		m.state.SessionFile = ""
+		m.state.SessionID = ""
 		return m, tea.Batch(m.refreshState(), m.refreshStats(), m.loadEntries())
 
 	case "compact":

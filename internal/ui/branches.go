@@ -25,12 +25,14 @@ type forkResultMsg struct {
 	text      string
 	cancelled bool
 	messages  []rpc.Message
+	state     *rpc.State
 	err       error
 }
 
 type cloneResultMsg struct {
 	cancelled bool
 	messages  []rpc.Message
+	state     *rpc.State
 	err       error
 }
 
@@ -104,6 +106,11 @@ func (m *Model) forkSession(entryID string) tea.Cmd {
 		}
 		historyPayload, _ := rpc.DecodeTyped[rpc.MessagesPayload](history)
 		msg.messages = historyPayload.Messages
+		if stateResponse, stateErr := client.DoOK(ctx, rpc.GetState()); stateErr == nil {
+			if state, decodeErr := rpc.DecodeTyped[rpc.State](stateResponse); decodeErr == nil {
+				msg.state = &state
+			}
+		}
 		return msg
 	}
 }
@@ -118,17 +125,30 @@ func (m *Model) applyForkResult(msg forkResultMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.sessionEpoch.Add(1)
+	if msg.state != nil {
+		m.state = *msg.state
+	} else {
+		m.state.SessionName = ""
+		m.state.SessionFile = ""
+		m.state.SessionID = ""
+	}
 	m.loadHistory(msg.messages)
 	m.composer.SetText(msg.text)
 	m.completion.Refresh(m.composer.Value())
 	m.transcript.ScrollToBottom()
 	m.logEntries = nil
-	m.autoTitlePending = false
+	m.autoTitlePending = m.state.SessionName == ""
+	m.autoTitleAttempts = 0
+	m.resetSessionNameWatch()
 	m.invalidateTitle()
 	m.addNotice("forked to a new session")
 	m.setToast("forked; the message is back in the editor")
 	m.layout()
-	return m, tea.Batch(m.refreshState(), m.refreshStats(), m.loadEntries())
+	commands := []tea.Cmd{m.refreshState(), m.refreshStats(), m.loadEntries()}
+	if auto := m.autoTitleFromHistory(msg.messages); auto != nil {
+		commands = append(commands, auto)
+	}
+	return m, tea.Batch(commands...)
 }
 
 func (m *Model) cloneSession() tea.Cmd {
@@ -155,6 +175,11 @@ func (m *Model) cloneSession() tea.Cmd {
 		}
 		historyPayload, _ := rpc.DecodeTyped[rpc.MessagesPayload](history)
 		msg.messages = historyPayload.Messages
+		if stateResponse, stateErr := client.DoOK(ctx, rpc.GetState()); stateErr == nil {
+			if state, decodeErr := rpc.DecodeTyped[rpc.State](stateResponse); decodeErr == nil {
+				msg.state = &state
+			}
+		}
 		return msg
 	}
 }
@@ -169,13 +194,26 @@ func (m *Model) applyCloneResult(msg cloneResultMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.sessionEpoch.Add(1)
+	if msg.state != nil {
+		m.state = *msg.state
+	} else {
+		m.state.SessionName = ""
+		m.state.SessionFile = ""
+		m.state.SessionID = ""
+	}
 	m.loadHistory(msg.messages)
 	m.logEntries = nil
-	m.autoTitlePending = false
+	m.autoTitlePending = m.state.SessionName == ""
+	m.autoTitleAttempts = 0
+	m.resetSessionNameWatch()
 	m.invalidateTitle()
 	m.addNotice("cloned the current branch into a new session")
 	m.setToast("cloned to a new session")
-	return m, tea.Batch(m.refreshState(), m.refreshStats(), m.loadEntries())
+	commands := []tea.Cmd{m.refreshState(), m.refreshStats(), m.loadEntries()}
+	if auto := m.autoTitleFromHistory(msg.messages); auto != nil {
+		commands = append(commands, auto)
+	}
+	return m, tea.Batch(commands...)
 }
 
 func (m *Model) loadTree() tea.Cmd {

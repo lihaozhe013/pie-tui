@@ -192,6 +192,8 @@ func (m *Model) applyProjectSwitch(msg projectSwitchedMsg) (tea.Model, tea.Cmd) 
 	m.opts.CWD = msg.dir
 	m.sessionEpoch.Add(1)
 	m.autoTitlePending = false
+	m.autoTitleAttempts = 0
+	m.resetSessionNameWatch()
 	m.invalidateTitle()
 	m.transcript.Clear()
 	m.state = rpc.State{}

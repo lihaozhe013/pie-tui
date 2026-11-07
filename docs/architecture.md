@@ -108,13 +108,25 @@ break the resume picker.
 
 ### Automatic titles
 
-An unnamed session is named automatically after its first settled turn, and
-again when an unnamed session is resumed or attached. The request is a one-shot
-`pi --print` subprocess with no tools or session state, and the result is written
-back through `set_session_name`, so Pie and the TUI see the same title. Only one
-request is allowed to write at a time, and a session switch or manual rename
-invalidates an in-flight result before it can rename the wrong session or
-overwrite a user's name. `/title` remains the explicit regenerate action.
+An unnamed session is named automatically from its first accepted prompt. The
+request is a one-shot `pi --print` subprocess with no tools or session state, so
+the title appears before a long first turn finishes. If it fails, the settled
+turn retries with the full transcript (including aborted turns), up to three
+consecutive attempts; a fresh prompt resets that budget. Resumed, attached,
+forked, and cloned sessions without a name are titled from their history
+immediately.
+
+The result is written back through `set_session_name`, the same `session_info`
+record Pie reads. Only one request is allowed to write at a time, and a session
+switch or manual rename invalidates an in-flight result before it can rename the
+wrong session or overwrite a user's name. Before an automatic write, the client
+also asks pi for the current name so a title written by another client wins.
+
+A running TUI watches its current session file every two seconds. It seeds from
+the newest record once, then reads only newly appended bytes; a `session_info`
+written by the Web UI updates the header and an open resume picker. The
+incremental parser lives in `internal/session` (`ParseNameChunk`). `/title`
+remains the explicit regenerate action.
 
 ### Selection
 

@@ -69,6 +69,15 @@ const (
 	toastDuration = 5 * time.Second
 	// heartbeatInterval expires toasts even when pi is idle.
 	heartbeatInterval = time.Second
+	// externalNamePollInterval keeps a Web-generated title visible without
+	// rereading the whole session file on every tick.
+	externalNamePollInterval = 2 * time.Second
+	// maxSessionNameRead bounds one incremental name-watch read. A larger
+	// gap is handled by a reverse scan instead of a large allocation.
+	maxSessionNameRead = 4 << 20
+	// maxAutoTitleAttempts bounds consecutive automatic title calls. A fresh
+	// prompt resets a spent budget.
+	maxAutoTitleAttempts = 3
 	// commandTimeout bounds a single RPC command issued by the UI.
 	commandTimeout = 60 * time.Second
 )
@@ -125,6 +134,20 @@ type (
 		sessionID string
 		requestID uint64
 		resp      *rpc.Response
+		err       error
+	}
+
+	autoTitleRetryMsg struct{ sessionID string }
+
+	sessionNameMsg struct {
+		sessionID string
+		pollID    uint64
+		watchSeq  uint64
+		path      string
+		name      string
+		found     bool
+		offset    int64
+		partial   []byte
 		err       error
 	}
 
@@ -237,6 +260,20 @@ type Model struct {
 	titleSeq     uint64
 	// sessionEpoch invalidates in-flight title requests after a session switch.
 	sessionEpoch atomic.Uint64
+	// autoTitleAttempts caps retries for one session. A success, a manual
+	// rename, or a session switch resets it.
+	autoTitleAttempts int
+	// nameWatch* follow the current session file so a title written by the
+	// Web UI appears here without reopening the session.
+	nameWatchPath    string
+	nameWatchOffset  int64
+	nameWatchPartial []byte
+	nameWatchName    string
+	nameWatchValid   bool
+	nameWatchSeq     uint64
+	namePollID       uint64
+	namePollPending  bool
+	namePollAt       time.Time
 
 	presetFile  *config.PresetFile
 	presetDraft *presetDraft
@@ -525,15 +562,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state.SessionID != "" && msg.state.SessionID != "" && m.state.SessionID != msg.state.SessionID {
 			m.sessionEpoch.Add(1)
 			m.invalidateTitle()
+			m.autoTitleAttempts = 0
+			m.autoTitlePending = false
+			m.resetSessionNameWatch()
+		}
+		if m.nameWatchValid && m.nameWatchPath == msg.state.SessionFile {
+			// The file is the shared source of truth: pi's in-memory name can
+			// lag behind a title written by the Web UI.
+			msg.state.SessionName = m.nameWatchName
 		}
 		m.state = msg.state
+		if msg.state.SessionName != "" {
+			m.noteSessionName(msg.state.SessionName)
+		}
 		return m, nil
 
 	case heartbeatMsg:
 		if m.toast != "" && time.Now().After(m.toastUntil) {
 			m.toast = ""
 		}
-		return m, m.heartbeat()
+		commands := []tea.Cmd{m.heartbeat()}
+		if cmd := m.pollSessionName(); cmd != nil {
+			commands = append(commands, cmd)
+		}
+		return m, tea.Batch(commands...)
 
 	case tickMsg:
 		m.ticking = false
@@ -650,6 +702,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resetPresetRestore()
 		m.sessionEpoch.Add(1)
 		m.autoTitlePending = false
+		m.autoTitleAttempts = 0
+		m.resetSessionNameWatch()
 		m.invalidateTitle()
 		if msg.err != nil {
 			m.addError("load messages: " + msg.err.Error())
@@ -660,11 +714,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.loadHistory(msg.messages)
 		if msg.state != nil {
-			if m.state.IsStreaming {
-				// Title the session once the in-flight turn settles. The history
-				// may still be incomplete here; the settled turn fetches it again.
-				m.autoTitlePending = m.state.SessionName == ""
-			} else if cmd := m.autoTitleFromHistory(msg.messages); cmd != nil {
+			// Name the session from the history now, even if the attached turn
+			// is still streaming; a failure retries when that turn settles.
+			m.autoTitlePending = m.state.SessionName == ""
+			if cmd := m.autoTitleFromHistory(msg.messages); cmd != nil {
 				return m, cmd
 			}
 		}
@@ -764,6 +817,54 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case autoTitleRetryMsg:
+		if msg.sessionID == "" || msg.sessionID != m.state.SessionID || m.state.SessionName != "" ||
+			m.titleRunning || !m.autoTitlePending {
+			return m, nil
+		}
+		m.autoTitlePending = false
+		return m, m.startAutoTitle(nil)
+
+	case sessionNameMsg:
+		if msg.pollID != m.namePollID {
+			// A newer poll owns namePollPending.
+			return m, nil
+		}
+		m.namePollPending = false
+		if msg.watchSeq != m.nameWatchSeq {
+			// The watch was reset or a name arrived while this read was in
+			// flight; its snapshot is stale.
+			return m, nil
+		}
+		if msg.err != nil {
+			return m, nil
+		}
+		if msg.path == "" || msg.path != m.state.SessionFile {
+			return m, nil
+		}
+		if msg.sessionID != "" && msg.sessionID != m.state.SessionID {
+			return m, nil
+		}
+		m.nameWatchPath = msg.path
+		m.nameWatchOffset = msg.offset
+		m.nameWatchPartial = msg.partial
+		if !msg.found {
+			return m, nil
+		}
+		m.nameWatchName = msg.name
+		m.nameWatchValid = true
+		if msg.name == m.state.SessionName {
+			return m, nil
+		}
+		// Another client wrote a title. Adopt it before any in-flight auto
+		// title can finish and overwrite it.
+		m.noteSessionName(msg.name)
+		m.autoTitlePending = false
+		m.autoTitleAttempts = 0
+		m.sessionEpoch.Add(1)
+		m.invalidateTitle()
+		return m, nil
+
 	case titleMsg:
 		if msg.requestID != 0 && msg.requestID != m.titleRequest {
 			// A newer request owns titleRunning.
@@ -776,12 +877,31 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.silent {
 			// Auto-naming is best-effort: failures stay out of the transcript.
+			if msg.err != nil {
+				if m.state.SessionName == "" && m.autoTitleAttempts < maxAutoTitleAttempts {
+					m.autoTitlePending = true
+					if msg.sessionID != "" {
+						return m, tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+							return autoTitleRetryMsg{sessionID: msg.sessionID}
+						})
+					}
+				} else {
+					m.autoTitlePending = false
+				}
+				return m, nil
+			}
+			m.autoTitlePending = false
+			m.autoTitleAttempts = 0
+			m.noteSessionName(msg.title)
 			return m, nil
 		}
 		if msg.err != nil {
 			m.addError("title: " + msg.err.Error())
 			return m, nil
 		}
+		m.autoTitlePending = false
+		m.autoTitleAttempts = 0
+		m.noteSessionName(msg.title)
 		m.setToast("title: " + msg.title)
 		return m, nil
 
@@ -805,6 +925,8 @@ func (m *Model) applyHandshake(msg handshakeMsg) (tea.Model, tea.Cmd) {
 	m.sessionEpoch.Add(1)
 	m.state = msg.state
 	m.autoTitlePending = false
+	m.autoTitleAttempts = 0
+	m.resetSessionNameWatch()
 	m.invalidateTitle()
 	m.models = msg.models
 	m.levels = msg.levels
@@ -827,7 +949,11 @@ func (m *Model) applyHandshake(msg handshakeMsg) (tea.Model, tea.Cmd) {
 		m.layout()
 		m.transcript.Add(newBlock(blockNotice, "attached to a running turn"))
 		m.autoTitlePending = m.state.SessionName == ""
-		return m, tea.Batch(m.scheduleTick(), m.loadEntries())
+		commands := []tea.Cmd{m.scheduleTick(), m.loadEntries()}
+		if cmd := m.autoTitleFromHistory(msg.history); cmd != nil {
+			commands = append(commands, cmd)
+		}
+		return m, tea.Batch(commands...)
 	}
 
 	commands := []tea.Cmd{m.loadEntries()}

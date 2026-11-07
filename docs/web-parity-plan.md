@@ -332,13 +332,16 @@ the full suite is not run.
 - Run a one-shot `pi --print --no-session --no-tools --model <provider/id>`,
   parse the last non-empty line, trim, cap at 80 characters, then
   `set_session_name`.
-- Commands: `/title` and `/name` manual rename; a session-picker action with
-  idle, naming, success, and error states.
-- Automatic naming: an unnamed session is named after its first settled turn,
-  and again when it is resumed or attached. The resume picker reads the newest
-  `session_info` name from anywhere in the file, not just a fixed tail probe.
+- Commands: `/title` and `/name` manual rename.
+- Automatic naming: an unnamed session is named from its first accepted prompt,
+  retried when a turn settles (including aborted turns), and named from history
+  when it is resumed, attached, forked, or cloned. A running client watches the
+  session file for a title written by the Web UI. The resume picker reads the
+  newest `session_info` name from anywhere in the file, not just a fixed tail
+  probe.
 - Acceptance: titles are generated for both English and CJK sessions; manual
-  failures surface as an error block while automatic failures stay silent.
+  failures surface as an error block while automatic failures stay silent;
+  titles written by either client are visible to the other.
 
 ### P5: Goal
 
