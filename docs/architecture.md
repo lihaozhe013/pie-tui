@@ -160,12 +160,17 @@ OSC52 support.
 
 ### Rendering budget
 
-Streaming assistant text is split at blank lines outside fenced code blocks.
-Everything before the tail is a *stable segment*: it is rendered once per width
-and cached on the block. Only the tail is re-rendered, and only on a 40 ms tick,
-so a fast token stream cannot saturate the CPU. An unterminated fence gets a
-synthetic closing marker so code does not flicker between paragraph and block
-styling.
+Streaming assistant text is split at blank lines outside fenced code blocks,
+lists, and blockquotes. Everything before the tail is a *stable segment*: it is
+rendered once per width and cached on the block. Each segment drops the blank row
+glamour puts at a standalone document's edges (a list or fence opens with one; a
+heading ends with one behind the renderer's reset) before the segments are
+joined with a single blank line. Only the tail is re-rendered, and only on a
+40 ms tick, so a fast token stream cannot saturate the CPU. An unterminated
+fence gets a synthetic closing marker so code does not flicker between paragraph
+and block styling. When the message ends, it is rendered once as one document,
+which keeps loose lists and nested blocks structurally intact; the result is
+cached like any other finished block.
 
 Tool content follows the same rule. A shell command and a diff are tokenized
 once when their block is built; the diff is capped first, so rows the 200-row

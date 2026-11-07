@@ -276,10 +276,15 @@ func (t *transcript) render(b *block) string {
 		out = renderNotice(b.text, width, t.styles.errorText)
 	}
 
-	b.cache.value = out
-	b.cache.revision = b.revision
-	b.cache.width = width
-	b.cache.valid = true
+	// Only finished blocks are cached: a streaming block re-renders every tick,
+	// and caching its intermediate output would let a stale segmented render
+	// win over the whole-document render when the stream ends.
+	if !b.streaming {
+		b.cache.value = out
+		b.cache.revision = b.revision
+		b.cache.width = width
+		b.cache.valid = true
+	}
 	return out
 }
 
@@ -309,6 +314,18 @@ func (t *transcript) renderAssistant(b *block, width int) string {
 	text := strings.TrimSuffix(b.text, "\n")
 	if strings.TrimSpace(text) == "" {
 		return ""
+	}
+
+	// A finished message is rendered as a single document, so lists, loose
+	// lists, and quotes keep their structure and the blocks are spaced the way
+	// glamour spaces a whole document. Streaming keeps the segment cache below
+	// so only the growing tail is re-rendered.
+	if !b.streaming {
+		// The segment cache only serves streaming; the finished block is cached
+		// as a whole by the transcript.
+		b.stable.src = nil
+		b.stable.out = nil
+		return t.md.render(text, width)
 	}
 
 	split := splitMarkdown(text)
@@ -348,7 +365,7 @@ func (t *transcript) renderAssistant(b *block, width int) string {
 		parts = append(parts, t.md.render(tail, width))
 	}
 
-	return strings.TrimRight(strings.Join(parts, "\n\n"), "\n")
+	return strings.Join(parts, "\n\n")
 }
 
 func (t *transcript) renderThinking(b *block, width int) string {
@@ -592,7 +609,29 @@ func (m *markdownRenderer) render(src string, width int) string {
 	if err != nil {
 		return wrapPlain(src, width)
 	}
-	return strings.TrimRight(out, "\n")
+	return trimRendered(out)
+}
+
+// trimRendered removes the blank row glamour puts at each edge of a standalone
+// document. A list, code block, or quote opens with a newline, and a heading
+// ends with a newline followed by the renderer's reset, which TrimRight on
+// "\n" cannot reach. Without this, joining segments with one blank line leaves
+// two around every heading, list, and fence.
+func trimRendered(out string) string {
+	lines := strings.Split(out, "\n")
+	if len(lines) > 0 && isRenderedBlank(lines[0]) {
+		lines = lines[1:]
+	}
+	if len(lines) > 0 && isRenderedBlank(lines[len(lines)-1]) {
+		lines = lines[:len(lines)-1]
+	}
+	return strings.TrimRight(strings.Join(lines, "\n"), "\n")
+}
+
+// isRenderedBlank reports whether a rendered row shows nothing. Glamour pads
+// rows with styled spaces, so the row has to be stripped before it is checked.
+func isRenderedBlank(line string) bool {
+	return strings.TrimSpace(xansi.Strip(line)) == ""
 }
 
 func (m *markdownRenderer) rendererFor(width int) *glamour.TermRenderer {
@@ -624,7 +663,8 @@ func wrapPlain(src string, width int) string {
 }
 
 // markdownSplit separates complete markdown segments from the still-growing
-// tail. Segments only split on blank lines outside fenced code blocks.
+// tail. Segments split on blank lines outside fenced code blocks, lists, and
+// blockquotes.
 type markdownSplit struct {
 	stable    []string
 	tail      string
@@ -637,10 +677,12 @@ func splitMarkdown(src string) markdownSplit {
 	lines := strings.Split(src, "\n")
 
 	var (
-		stable   []string
-		start    int
-		fenceCh  byte
-		fenceLen int
+		stable       []string
+		start        int
+		fenceCh      byte
+		fenceLen     int
+		inList       bool
+		inBlockquote bool
 	)
 
 	for i, line := range lines {
@@ -653,11 +695,39 @@ func splitMarkdown(src string) markdownSplit {
 			}
 			continue
 		}
-		if fenceCh == 0 && strings.TrimSpace(line) == "" {
+		if fenceCh != 0 {
+			continue
+		}
+
+		if strings.TrimSpace(line) == "" {
+			// A blank line inside a list or quote belongs to that block: a loose
+			// list keeps its items together, and a quote keeps its paragraphs.
+			if inList || inBlockquote {
+				next := nextNonBlank(lines, i+1)
+				if inList && (listItemLine(next) || indentedLine(next)) {
+					continue
+				}
+				if inBlockquote && (quoteLine(next) || indentedLine(next)) {
+					continue
+				}
+			}
 			if i > start {
 				stable = append(stable, strings.Join(lines[start:i], "\n"))
 			}
 			start = i + 1
+			inList, inBlockquote = false, false
+			continue
+		}
+
+		switch {
+		case quoteLine(line):
+			inBlockquote, inList = true, false
+		case listItemLine(line):
+			inList, inBlockquote = true, false
+		case (inList || inBlockquote) && indentedLine(line):
+			// Continuation of the current item or quote paragraph.
+		default:
+			inList, inBlockquote = false, false
 		}
 	}
 
@@ -668,6 +738,52 @@ func splitMarkdown(src string) markdownSplit {
 		fenceChar: fenceCh,
 		fenceLen:  fenceLen,
 	}
+}
+
+// nextNonBlank is the next line with visible text, or "" at the end.
+func nextNonBlank(lines []string, from int) string {
+	for i := from; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) != "" {
+			return lines[i]
+		}
+	}
+	return ""
+}
+
+// listItemLine reports a line that starts a list item, allowing up to three
+// spaces of indentation and the "-", "*", "+", "1.", and "1)" markers.
+func listItemLine(line string) bool {
+	trimmed := strings.TrimLeft(line, " ")
+	if len(line)-len(trimmed) > 3 || len(trimmed) < 2 {
+		return false
+	}
+	switch trimmed[0] {
+	case '-', '*', '+':
+		return trimmed[1] == ' ' || trimmed[1] == '\t'
+	}
+	digits := 0
+	for digits < len(trimmed) && digits < 9 && trimmed[digits] >= '0' && trimmed[digits] <= '9' {
+		digits++
+	}
+	if digits == 0 || digits >= len(trimmed) {
+		return false
+	}
+	if trimmed[digits] != '.' && trimmed[digits] != ')' {
+		return false
+	}
+	rest := digits + 1
+	return rest < len(trimmed) && (trimmed[rest] == ' ' || trimmed[rest] == '\t')
+}
+
+// indentedLine is a continuation of a list item or blockquote paragraph.
+func indentedLine(line string) bool {
+	return strings.HasPrefix(line, "\t") || strings.HasPrefix(line, "  ")
+}
+
+// quoteLine reports a blockquote line, allowing up to three leading spaces.
+func quoteLine(line string) bool {
+	trimmed := strings.TrimLeft(line, " ")
+	return len(line)-len(trimmed) <= 3 && strings.HasPrefix(trimmed, ">")
 }
 
 // fenceMarker reports the fence delimiter of a line, if it starts one.

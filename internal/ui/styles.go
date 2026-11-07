@@ -183,10 +183,26 @@ func (s styles) markdownStyle() ansi.StyleConfig {
 	style.Document.BlockSuffix = ""
 	style.Document.Color = colorPtr(s.theme.Base.Dark)
 
-	for _, heading := range []*ansi.StyleBlock{&style.H1, &style.H2, &style.H3, &style.H4, &style.H5, &style.H6} {
-		heading.Color = colorPtr(s.theme.Accent.Dark)
-		heading.Bold = boolPtr(true)
-	}
+	// Headings keep their "#" markers, like Codex's TUI, so copied text stays
+	// valid Markdown. Levels are colour-coded, and H1 loses glamour's background
+	// chip so it matches the rest of the palette.
+	style.H1.Prefix = "# "
+	style.H1.Suffix = ""
+	style.H1.BackgroundColor = nil
+	style.H1.Color = colorPtr(s.theme.Accent.Dark)
+	style.H1.Bold = boolPtr(true)
+	style.H2.Color = colorPtr(s.theme.AccentSoft.Dark)
+	style.H2.Bold = boolPtr(true)
+	style.H3.Color = colorPtr(s.theme.Base.Dark)
+	style.H3.Bold = boolPtr(true)
+	style.H4.Color = colorPtr(s.theme.Muted.Dark)
+	style.H4.Bold = boolPtr(true)
+	style.H5.Color = colorPtr(s.theme.Muted.Dark)
+	style.H5.Bold = boolPtr(false)
+	style.H5.Italic = boolPtr(true)
+	style.H6.Color = colorPtr(s.theme.Muted.Dark)
+	style.H6.Bold = boolPtr(false)
+	style.H6.Italic = boolPtr(true)
 	style.Heading.Color = colorPtr(s.theme.Accent.Dark)
 
 	style.Emph.Color = colorPtr(s.theme.AccentSoft.Dark)
