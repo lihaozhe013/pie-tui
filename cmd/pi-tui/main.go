@@ -88,14 +88,19 @@ func run(args []string, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer stop()
 
-	piCommand := piArgs(cfg)
+	extensionPath := ""
 	if state, stateErr := stateDir(); stateErr == nil {
 		if extension, ensureErr := bridge.Ensure(state); ensureErr == nil {
-			piCommand = append(piCommand, "-e", extension)
+			extensionPath = extension
 			logger.logf("bridge extension: %s", extension)
 		} else {
 			logger.logf("bridge extension unavailable: %v", ensureErr)
 		}
+	}
+
+	piCommand := piArgs(cfg)
+	if extensionPath != "" {
+		piCommand = append(piCommand, "-e", extensionPath)
 	}
 
 	client, err := rpc.Start(ctx, rpc.Options{
@@ -110,11 +115,28 @@ func run(args []string, stderr io.Writer) int {
 		return exitFailure
 	}
 
+	restartConfig := cfg
+	restartConfig.session = ""
+	restartConfig.name = ""
+	restartArgs := piArgs(restartConfig)
+	if extensionPath != "" {
+		restartArgs = append(restartArgs, "-e", extensionPath)
+	}
+	restart := func(dir string) (ui.Client, error) {
+		return rpc.Start(ctx, rpc.Options{
+			Bin:  piBinary,
+			Args: restartArgs,
+			Dir:  dir,
+			Logf: logger.logf,
+		})
+	}
+
 	model := ui.New(client, ui.Options{
 		SessionDir: cfg.sessionDir,
 		CWD:        cwd,
 		Version:    version,
 		PiBin:      piBinary,
+		Restart:    restart,
 	})
 
 	options := []tea.ProgramOption{

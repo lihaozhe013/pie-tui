@@ -29,6 +29,7 @@ type Client interface {
 	Done() <-chan struct{}
 	Err() error
 	StderrTail() []string
+	Close() error
 }
 
 // Options configures the model.
@@ -42,6 +43,9 @@ type Options struct {
 	// PiBin is the resolved pi executable, used for catalog and package
 	// commands the client shells out to.
 	PiBin string
+	// Restart starts a fresh pi in dir, used when the working directory
+	// changes. Nil disables project switching.
+	Restart func(dir string) (Client, error)
 }
 
 // Timing constants for the event loop.
@@ -62,7 +66,10 @@ const (
 type (
 	eventMsg struct{ event rpc.Event }
 
-	closedMsg struct{ err error }
+	closedMsg struct {
+		client Client
+		err    error
+	}
 
 	tickMsg struct{}
 
@@ -214,6 +221,12 @@ type Model struct {
 
 	mcpSnapshot mcp.Snapshot
 	mcpChecked  bool
+
+	restarting    bool
+	pendingNotice string
+	projectList   []session.Project
+	browseDir     string
+	sessionsAll   bool
 }
 
 // New builds the model around a connected client.
@@ -346,10 +359,11 @@ func (m *Model) heartbeat() tea.Cmd {
 
 func (m *Model) waitEvent() tea.Cmd {
 	events := m.client.Events()
+	client := m.client
 	return func() tea.Msg {
 		event, ok := <-events
 		if !ok {
-			return closedMsg{}
+			return closedMsg{client: client}
 		}
 		return eventMsg{event: event}
 	}
@@ -410,6 +424,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleEvent(msg.event)
 
 	case closedMsg:
+		if msg.client != nil && m.client != nil && msg.client != m.client {
+			// The old child exited after a project switch; its pump is stale.
+			return m, nil
+		}
 		m.disconnected = true
 		m.busy = false
 		m.activity.reset()
@@ -472,17 +490,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.addError("scan sessions: " + msg.err.Error())
 			return m, nil
 		}
-		if len(msg.entries) == 0 {
+		if len(msg.entries) == 0 && m.sessionsAll {
 			m.setToast("no sessions found")
 			return m, nil
 		}
-		items := make([]pickerItem, 0, len(msg.entries))
+		items := make([]pickerItem, 0, len(msg.entries)+1)
 		for _, entry := range msg.entries {
 			items = append(items, pickerItem{
 				Value:  entry.Path,
 				Label:  entry.Label(),
 				Detail: fmt.Sprintf("%s · %s", shortenPath(entry.CWD), humanTime(entry.Modified)),
 			})
+		}
+		if !m.sessionsAll {
+			items = append(items, pickerItem{Value: sessionAllValue, Label: "Show all directories", Detail: "sessions from every project"})
 		}
 		m.openOverlay(newPickerOverlay("session", "Resume session", items))
 		return m, nil
@@ -508,6 +529,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.openGoalPanel()
 		}
 		return m, nil
+
+	case projectsMsg:
+		return m.applyProjects(msg)
+
+	case projectSwitchedMsg:
+		return m.applyProjectSwitch(msg)
 
 	case mcpCheckMsg:
 		return m.applyMCPCheck(msg)
@@ -565,6 +592,10 @@ func (m *Model) applyHandshake(msg handshakeMsg) (tea.Model, tea.Cmd) {
 	m.reloadCatalog()
 	m.completion.SetItems(m.commandItems())
 	m.loadHistory(msg.history)
+	if m.pendingNotice != "" {
+		m.addNotice(m.pendingNotice)
+		m.pendingNotice = ""
+	}
 
 	if m.state.IsStreaming {
 		// Attach to a run that was already in flight when we started.

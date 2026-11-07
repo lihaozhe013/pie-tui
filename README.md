@@ -44,6 +44,11 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   `.pi/settings.json`, installs globally or locally, updates one package or
   all, and enables or disables entries. Disabling keeps unknown keys and
   refuses filtered entries instead of silently dropping their filters
+- Project switching with `/cwd [dir]`: a recent-project picker derived from
+  session headers, a directory browser, and `/cwd <path>` for direct entry.
+  Switching restarts pi in the new folder and starts a fresh session there.
+  `/resume` lists the current folder's sessions and offers "Show all
+  directories" for the rest
 - An MCP tab that lists the agent and project `mcp.json` servers, checks
   connections with `pi mcp list --json`, toggles `enabled`, sets the exposure
   mode, adds servers through `pi mcp add`, and signs in, signs out, or removes
@@ -135,6 +140,7 @@ memory from other CLIs keeps working.
 | `/compact` | `/compress` | compact the conversation |
 | `/name` | `/rename` | rename this session |
 | `/title` | | generate a title from the transcript with a one-shot model call |
+| `/cwd` | `/dir`, `/project` | switch working directory; no argument opens the project picker |
 | `/goal` | | goal status and controls; arguments are forwarded to the goal package |
 | `/export` | | export the session as HTML |
 | `/stats` | `/status`, `/usage` | show token and context usage |

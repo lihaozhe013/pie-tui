@@ -732,6 +732,11 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 		overlay.action = "session-name"
 		m.openOverlay(overlay)
 		return nil, true
+	case "/cwd":
+		if argument != "" {
+			return m.switchProject(argument), true
+		}
+		return m.openProjectPicker(), true
 	case "/title":
 		if argument != "" {
 			return m.setSessionName(argument), true
@@ -911,10 +916,11 @@ func (m *Model) listSessions() tea.Cmd {
 		if err != nil {
 			return sessionListMsg{err: err}
 		}
-		entries, err := session.ListForCWD(resolved, cwd, 20)
-		if err != nil || len(entries) == 0 {
-			// Fall back to the global list when this directory has none.
-			entries, err = session.List(resolved, 20)
+		var entries []session.Entry
+		if m.sessionsAll {
+			entries, err = session.List(resolved, 30)
+		} else {
+			entries, err = session.ListForCWD(resolved, cwd, 30)
 		}
 		return sessionListMsg{entries: entries, err: err}
 	}
@@ -1277,7 +1283,13 @@ func (m *Model) selectOverlayItem() tea.Cmd {
 			m.closeOverlay()
 			return m.setModelByLabel(item.Value)
 		case "session":
+			if item.Value == sessionAllValue {
+				m.closeOverlay()
+				m.sessionsAll = true
+				return m.listSessions()
+			}
 			m.closeOverlay()
+			m.sessionsAll = false
 			m.transcript.Clear()
 			return m.switchSession(item.Value)
 		case "help":
@@ -1292,6 +1304,20 @@ func (m *Model) selectOverlayItem() tea.Cmd {
 		case "preset":
 			m.closeOverlay()
 			return m.applyPreset(item.Value)
+		case "project":
+			m.closeOverlay()
+			if item.Value == projectBrowseValue {
+				start := m.opts.CWD
+				if m.prefs != nil {
+					if last := m.prefs.LastCWD(); last != "" {
+						start = last
+					}
+				}
+				return m.openDirectoryPicker(start)
+			}
+			return m.switchProject(item.Value)
+		case "cwd-browse":
+			return m.browseTo(item.Value)
 		case "skill-search-results":
 			m.closeOverlay()
 			m.setToast("installing " + item.Value + "…")

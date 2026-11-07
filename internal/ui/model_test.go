@@ -71,6 +71,8 @@ func (f *fakeClient) Events() <-chan rpc.Event { return f.events }
 
 func (f *fakeClient) Done() <-chan struct{} { return make(chan struct{}) }
 
+func (f *fakeClient) Close() error { return nil }
+
 func (f *fakeClient) Err() error { return nil }
 
 func (f *fakeClient) StderrTail() []string { return nil }

@@ -126,6 +126,16 @@ clients keeps its preset and its Plan mode. If the extension fails to load, the
 UI reports `unavailable` in Settings › General and refuses preset changes
 rather than silently diverging.
 
+The working directory is the child process's `Dir`, fixed for the life of one
+pi process. `/cwd` therefore restarts the child: it closes the old stdin,
+starts a fresh pi with the same binary, flags, and bridge extension but no
+`--session`, and re-runs the handshake. The new session starts in the chosen
+folder; the old transcript is not carried over. A stale `closed` event from the
+replaced child is ignored by comparing the client identity. Recent projects are
+derived from the `cwd` in session headers rather than a second index, and
+`pie-tui-settings.json` keeps the last choice only to seed the browser; the
+process's own directory stays the default when no `--cwd` is given.
+
 MCP servers are read from the agent's `mcp.json` and the project's
 `.pi/mcp.json` with the same `mcpServers` shape pi uses. The panel edits only
 three fields through `internal/config`: `enabled`, `exposure`, and removal; an

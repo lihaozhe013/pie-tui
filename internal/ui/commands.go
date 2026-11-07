@@ -29,6 +29,7 @@ var builtinCommandTable = []builtinCommand{
 	{Name: "/name", Detail: "rename this session", Aliases: []string{"/rename"}},
 	{Name: "/title", Detail: "generate a session title"},
 	{Name: "/goal", Detail: "goal status and controls"},
+	{Name: "/cwd", Detail: "switch working directory", Aliases: []string{"/dir", "/project"}},
 	{Name: "/export", Detail: "export the session as HTML"},
 	{Name: "/stats", Detail: "show token and context usage", Aliases: []string{"/status", "/usage"}},
 	{Name: "/clear", Detail: "clear the scrollback", Aliases: []string{"/cls"}},

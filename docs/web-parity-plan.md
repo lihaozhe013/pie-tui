@@ -381,7 +381,8 @@ the full suite is not run.
   recent projects derived from session files, session list filter by directory
   with a show-all toggle.
 - New sessions start in the chosen directory; switching directories or projects
-  restarts the child.
+  restarts the child. `--cwd` wins; otherwise the process directory is the
+  default and the last choice only seeds the picker.
 - Acceptance: a session created in the TUI appears under the same project group
   in Pie.
 
