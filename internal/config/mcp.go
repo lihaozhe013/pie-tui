@@ -75,6 +75,93 @@ func (m *MCPFile) Servers() []MCPServer {
 	return out
 }
 
+// Update applies fn to a freshly loaded mcp.json and writes it back.
+func (m *MCPFile) Update(fn func(root *Value) error) error {
+	if err := Update(m.path, fn); err != nil {
+		return err
+	}
+	doc, err := LoadObject(m.path)
+	if err != nil {
+		return err
+	}
+	m.root = doc.Root()
+	return nil
+}
+
+// SetServerEnabled writes or removes the enabled flag for one server.
+func (m *MCPFile) SetServerEnabled(name string, enabled bool) error {
+	return m.Update(func(root *Value) error {
+		entry, err := mcpEntry(root, name)
+		if err != nil {
+			return err
+		}
+		if enabled {
+			entry.Delete("enabled")
+		} else {
+			entry.SetBool("enabled", false)
+		}
+		return nil
+	})
+}
+
+// SetServerExposure sets the tool exposure mode for one server.
+func (m *MCPFile) SetServerExposure(name, exposure string) error {
+	switch exposure {
+	case "codemode", "deferred", "direct", "hidden", "auto":
+	default:
+		return &TypeError{Path: m.path, Key: "exposure", Expected: "one of codemode, deferred, direct, hidden, auto", Got: KindString}
+	}
+	return m.Update(func(root *Value) error {
+		entry, err := mcpEntry(root, name)
+		if err != nil {
+			return err
+		}
+		if exposure == "auto" {
+			entry.Delete("exposure")
+		} else {
+			entry.SetString("exposure", exposure)
+		}
+		return nil
+	})
+}
+
+// RemoveServer deletes one server entry.
+func (m *MCPFile) RemoveServer(name string) error {
+	return m.Update(func(root *Value) error {
+		container := root.Get("mcpServers")
+		if container == nil || !container.IsObject() {
+			return &TypeError{Path: m.path, Key: "mcpServers", Expected: "an object", Got: KindNull}
+		}
+		if !container.Delete(name) {
+			return &TypeError{Path: m.path, Key: "mcpServers", Expected: "an entry named " + name, Got: KindNull}
+		}
+		return nil
+	})
+}
+
+func mcpEntry(root *Value, name string) (*Value, error) {
+	container := root.Get("mcpServers")
+	if container == nil || !container.IsObject() {
+		return nil, &TypeError{Key: "mcpServers", Expected: "an object", Got: KindNull}
+	}
+	entry := container.Get(name)
+	if entry == nil || !entry.IsObject() {
+		return nil, &TypeError{Key: "mcpServers", Expected: "an object entry named " + name, Got: KindNull}
+	}
+	return entry, nil
+}
+
+// Transport describes how pi reaches the server.
+func (s MCPServer) Transport() string {
+	if s.URL != "" {
+		return "http: " + s.URL
+	}
+	if s.Command != "" {
+		return "stdio: " + s.Command
+	}
+	return "unknown"
+}
+
 // Find returns one server by name.
 func (m *MCPFile) Find(name string) (MCPServer, bool) {
 	for _, server := range m.Servers() {

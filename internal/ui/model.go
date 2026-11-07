@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/lihaozhe/pie-tui/internal/config"
+	"github.com/lihaozhe/pie-tui/internal/mcp"
 	"github.com/lihaozhe/pie-tui/internal/modelcatalog"
 	"github.com/lihaozhe/pie-tui/internal/rpc"
 	"github.com/lihaozhe/pie-tui/internal/session"
@@ -210,6 +211,9 @@ type Model struct {
 	goalEnabled   bool
 	goal          session.Goal
 	hasGoal       bool
+
+	mcpSnapshot mcp.Snapshot
+	mcpChecked  bool
 }
 
 // New builds the model around a connected client.
@@ -504,6 +508,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.openGoalPanel()
 		}
 		return m, nil
+
+	case mcpCheckMsg:
+		return m.applyMCPCheck(msg)
+
+	case mcpActionMsg:
+		return m.applyMCPAction(msg)
 
 	case pluginActionMsg:
 		return m.applyPluginAction(msg)

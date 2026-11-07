@@ -401,6 +401,9 @@ func (m *Model) handleSettingsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.overlay.action == "package-detail" {
 			return m, m.openSettingsAt("plugins")
 		}
+		if m.overlay.action == "mcp-detail" {
+			return m, m.openSettingsAt("mcp")
+		}
 		m.closeOverlay()
 		return m, nil
 	case "ctrl+c":
@@ -527,15 +530,21 @@ func (m *Model) applySettingChoice(value string) tea.Cmd {
 // openSettings reloads the shared files and opens the panel.
 func (m *Model) openSettings() tea.Cmd {
 	m.reloadConfig()
+	// A single-tab panel (goal, a detail view) is not the settings home.
+	if m.settingsPanel != nil && m.settingsPanel.single {
+		m.settingsPanel = nil
+	}
 	m.openSettingsOverlay()
 	return tea.Batch(m.loadEntries(), m.loadToolSnapshot())
 }
 
 func (m *Model) openSettingsOverlay() {
-	// A single-tab panel (goal, preset editor, provider editor) owns its rows;
-	// reopening Settings must go back to the main tabs rather than that panel.
-	if m.settingsPanel == nil || m.settingsPanel.single {
+	if m.settingsPanel == nil {
 		m.settingsPanel = newSettingsState(m)
+	} else if m.settingsPanel.single {
+		// A detail panel survives a round trip through a picker.
+		m.openOverlay(&overlay{kind: overlaySettings, action: m.settingsPanel.action, settings: m.settingsPanel})
+		return
 	} else {
 		m.settingsPanel.rebuild(m)
 	}
@@ -576,7 +585,7 @@ func (m *Model) buildSettingsTabs() []settingsTab {
 		m.toolsSettingsTab(),
 		m.skillsSettingsTab(),
 		m.pluginsSettingsTab(),
-		placeholderTab("mcp", "MCP", "MCP servers, transports, and sign-in will live here."),
+		m.mcpSettingsTab(),
 	}
 }
 

@@ -99,7 +99,7 @@ func TestSettingsLeavesTheGoalPanel(t *testing.T) {
 	if m.settingsPanel == nil || !m.settingsPanel.single {
 		t.Fatal("goal panel not open")
 	}
-	m.openSettingsOverlay()
+	m.openSettings()
 	if m.settingsPanel.single {
 		t.Fatal("main settings replaced by the goal panel")
 	}

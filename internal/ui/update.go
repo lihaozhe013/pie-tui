@@ -1338,6 +1338,12 @@ func (m *Model) answerInput(value string) tea.Cmd {
 	if action == "plugin-install-project" {
 		return m.installPackage(value, false)
 	}
+	if action == "mcp-add-global" {
+		return m.addMCP(value, false)
+	}
+	if action == "mcp-add-local" {
+		return m.addMCP(value, true)
+	}
 	if action == "settings-agents" {
 		if err := config.WriteInstructions(m.paths, value); err != nil {
 			if m.settingsPanel != nil {

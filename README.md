@@ -44,6 +44,10 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   `.pi/settings.json`, installs globally or locally, updates one package or
   all, and enables or disables entries. Disabling keeps unknown keys and
   refuses filtered entries instead of silently dropping their filters
+- An MCP tab that lists the agent and project `mcp.json` servers, checks
+  connections with `pi mcp list --json`, toggles `enabled`, sets the exposure
+  mode, adds servers through `pi mcp add`, and signs in, signs out, or removes
+  through the same CLI
 - Goal controls through a manually installed goal package: `/goal` shows the
   status, objective, token usage, and the start, pause, resume, complete, and
   clear actions; the header carries the status. `pie-tui` never bundles the

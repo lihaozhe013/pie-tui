@@ -126,6 +126,15 @@ clients keeps its preset and its Plan mode. If the extension fails to load, the
 UI reports `unavailable` in Settings › General and refuses preset changes
 rather than silently diverging.
 
+MCP servers are read from the agent's `mcp.json` and the project's
+`.pi/mcp.json` with the same `mcpServers` shape pi uses. The panel edits only
+three fields through `internal/config`: `enabled`, `exposure`, and removal; an
+add goes through `pi mcp add` so the CLI validates transports, headers, and
+OAuth settings exactly as it does for the web panel. Connection state comes from
+`pi mcp list --json`, run on demand because it starts every enabled server.
+Project files keep pi's trust rule at run time: the terminal writes them only
+for the folder the person opened.
+
 Plugins are the `packages` array in `settings.json` and in the project's
 `.pi/settings.json`. A string entry is enabled; an object whose four resource
 lists are all empty is disabled. Disabling a filtered entry is refused because
