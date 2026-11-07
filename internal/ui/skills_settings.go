@@ -176,6 +176,15 @@ func (m *Model) openSkillDetail(skill skills.Skill) tea.Cmd {
 			Current: func() string { return "on the next pi start or reload" },
 		},
 		{
+			ID:    "skill-reload",
+			Label: "Reload pi",
+			Help:  "Runs /pie-reload so pi rereads its skill list without restarting.",
+			Kind:  settingsAction,
+			Run: func(m *Model, s *settingsState) tea.Cmd {
+				return m.reloadPi()
+			},
+		},
+		{
 			ID:    "skill-edit",
 			Label: "Edit skill file",
 			Kind:  settingsAction,
