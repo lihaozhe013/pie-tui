@@ -126,6 +126,15 @@ clients keeps its preset and its Plan mode. If the extension fails to load, the
 UI reports `unavailable` in Settings › General and refuses preset changes
 rather than silently diverging.
 
+`/fork` and `/clone` are RPC operations that replace the active session: after
+the command the client refetches `get_messages`, state, stats, and entries, so
+the transcript and header belong to the new session. A fork puts the chosen
+prompt back in the editor, which is what the web UI does. `/tree` is read-only:
+`get_tree` is printed into the transcript because the RPC has no command to make
+an arbitrary node active; forking remains the way to branch. Enter-to-send is a
+terminal-only preference because alt+enter is the only portable send chord when
+Enter inserts newlines.
+
 `/search` reads session files directly, newest first: a name or directory
 match is checked before reading the body, and the transcript scan unmarshals
 each matching line and walks its string values so the snippet reads as text.

@@ -168,6 +168,7 @@ type Model struct {
 	widget       []string
 	showThinking bool
 	expanded     bool
+	enterToSend  bool
 
 	busy         bool
 	frame        int
@@ -224,6 +225,7 @@ type Model struct {
 	restarting     bool
 	pendingNotice  string
 	pendingContext bool
+	tree           session.Tree
 	projectList    []session.Project
 	browseDir      string
 	sessionsAll    bool
@@ -251,6 +253,7 @@ func New(client Client, opts Options) *Model {
 		m.showThinking = m.prefs.ShowThinking()
 		m.expanded = m.prefs.ExpandTools()
 		m.goalEnabled = m.prefs.GoalEnabled()
+		m.enterToSend = m.prefs.EnterToSend()
 	}
 	m.styles = newStyles(themeFor(themeID))
 	m.transcript = newTranscript(m.styles)
@@ -550,6 +553,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.showContextPanel()
 		return m, nil
+
+	case forkMessagesMsg:
+		return m.applyForkMessages(msg)
+
+	case forkResultMsg:
+		return m.applyForkResult(msg)
+
+	case cloneResultMsg:
+		return m.applyCloneResult(msg)
+
+	case treeResultMsg:
+		return m.applyTree(msg)
 
 	case sessionSearchMsg:
 		return m.applySessionSearch(msg)
@@ -881,6 +896,9 @@ func (m *Model) renderCompletion() string {
 
 func (m *Model) renderEditor() string {
 	hint := "enter to send · ctrl+j newline · ctrl+o expand · /help"
+	if !m.enterToSend {
+		hint = "enter newline · alt+enter send · ctrl+o expand · /help"
+	}
 	if m.busy {
 		hint = "enter to queue follow-up · ctrl+s to steer · esc to interrupt"
 	}

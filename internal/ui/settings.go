@@ -783,6 +783,22 @@ func (m *Model) appearanceSettingsTab() settingsTab {
 	if m.prefs != nil {
 		current = m.prefs.Theme()
 	}
+	if m.prefs != nil {
+		tab.Rows = append(tab.Rows, settingsRow{
+			ID:    "enter-sends",
+			Label: "Enter sends",
+			Help:  "When off, enter inserts a newline and alt+enter sends.",
+			Kind:  settingsToggle,
+			Bool:  func() bool { return m.enterToSend },
+			SetBool: func(on bool) error {
+				if err := m.prefs.SetEnterToSend(on); err != nil {
+					return err
+				}
+				m.enterToSend = on
+				return nil
+			},
+		})
+	}
 	tab.Rows = append(tab.Rows, settingsRow{
 		ID:      "theme",
 		Label:   "Theme",

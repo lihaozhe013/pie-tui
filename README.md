@@ -46,6 +46,11 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   refuses filtered entries instead of silently dropping their filters
 - A statistics panel from `/stats` with message counts, a token breakdown,
   cost, context usage, and the session file, refreshed while it is open
+- Branch tools: `/fork` lists forkable user messages and restores the chosen
+  prompt to the editor, `/clone` duplicates the branch, and `/tree` prints the
+  session tree with the current leaf marked
+- An Appearance toggle for whether Enter sends or inserts a newline
+  (alt+enter sends when Enter is a newline)
 - Session search from `/search [query]`: names, working directories, and
   transcript text across the session store, with a snippet and resume action
 - A Context panel from `/context` fed by the bridge: the live tool list with
@@ -153,6 +158,9 @@ memory from other CLIs keeps working.
 | `/image` | | attach a local image to a prompt (`/image shot.png what is this?`) |
 | `/context` | `/tools-view` | system prompt and tool definitions published by the bridge |
 | `/search` | | search session names, folders, and transcripts |
+| `/fork` | | fork from a user message; the prompt returns to the editor |
+| `/clone` | | clone the current branch into a new session |
+| `/tree` | | print the session tree with the current leaf marked |
 | `/goal` | | goal status and controls; arguments are forwarded to the goal package |
 | `/export` | | export the session as HTML |
 | `/stats` | `/status`, `/usage` | show the statistics panel (messages, tokens, cost, context) |

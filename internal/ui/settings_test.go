@@ -78,10 +78,15 @@ func TestThemeChangePersists(t *testing.T) {
 	m.layout()
 	m.openSettings()
 
-	// Appearance is the third tab; its only row is the theme choice.
+	// Appearance is the third tab; find the theme choice among its rows.
 	m.settingsPanel.active = 2
 	m.settingsPanel.row = 0
-	row := m.settingsPanel.currentRow()
+	var row *settingsRow
+	for i := range m.settingsPanel.currentTab().Rows {
+		if m.settingsPanel.currentTab().Rows[i].ID == "theme" {
+			row = &m.settingsPanel.currentTab().Rows[i]
+		}
+	}
 	if row == nil || row.Kind != settingsChoice {
 		t.Fatalf("theme row = %+v", row)
 	}

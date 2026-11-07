@@ -508,7 +508,17 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "enter":
+		if !m.enterToSend {
+			m.composer.InsertNewline()
+			m.layout()
+			return m, nil
+		}
 		return m, m.submit()
+
+	case "alt+enter":
+		if !m.enterToSend {
+			return m, m.submit()
+		}
 
 	case "shift+tab":
 		return m, m.cycleThinking()
@@ -731,6 +741,20 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 		overlay.action = "session-name"
 		m.openOverlay(overlay)
 		return nil, true
+	case "/fork":
+		if m.busy {
+			m.setToast("stop the current turn before forking")
+			return nil, true
+		}
+		return m.listForkMessages(), true
+	case "/clone":
+		if m.busy {
+			m.setToast("stop the current turn before cloning")
+			return nil, true
+		}
+		return m.cloneSession(), true
+	case "/tree":
+		return m.loadTree(), true
 	case "/search":
 		if argument != "" {
 			return m.searchSessions(argument), true
@@ -1328,6 +1352,9 @@ func (m *Model) selectOverlayItem() tea.Cmd {
 				return m.openDirectoryPicker(start)
 			}
 			return m.switchProject(item.Value)
+		case "fork":
+			m.closeOverlay()
+			return m.forkSession(item.Value)
 		case "session-search-hit":
 			m.closeOverlay()
 			m.sessionsAll = false
