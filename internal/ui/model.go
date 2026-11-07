@@ -98,6 +98,12 @@ type (
 		err      error
 	}
 
+	titleMsg struct {
+		title string
+		resp  *rpc.Response
+		err   error
+	}
+
 	statsMsg struct{ stats rpc.SessionStats }
 
 	stateMsg struct{ state rpc.State }
@@ -477,6 +483,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.loadHistory(msg.messages)
+		return m, nil
+
+	case titleMsg:
+		if msg.err != nil {
+			m.addError("title: " + msg.err.Error())
+			return m, nil
+		}
+		m.setToast("title: " + msg.title)
 		return m, nil
 
 	case tea.KeyMsg:

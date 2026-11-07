@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/lihaozhe/pie-tui/internal/config"
 	"github.com/lihaozhe/pie-tui/internal/rpc"
 	"github.com/lihaozhe/pie-tui/internal/session"
+	"github.com/lihaozhe/pie-tui/internal/title"
 )
 
 // handleEvent folds one protocol event into the UI state.
@@ -715,6 +717,11 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 		overlay.action = "session-name"
 		m.openOverlay(overlay)
 		return nil, true
+	case "/title":
+		if argument != "" {
+			return m.setSessionName(argument), true
+		}
+		return m.generateTitle(), true
 	case "/settings":
 		return m.openSettings(), true
 	case "/preset":
@@ -932,6 +939,51 @@ func (m *Model) exportSession() tea.Cmd {
 		defer cancel()
 		response, err := client.DoOK(ctx, rpc.ExportHTML(""))
 		return responseMsg{action: "export", resp: response, err: err}
+	}
+}
+
+// generateTitle asks a one-shot model call to name the session from the
+// transcript, matching the web UI's auto-name action.
+func (m *Model) generateTitle() tea.Cmd {
+	client := m.client
+	bin := m.opts.PiBin
+	model := m.state.Model
+	level := "off"
+	modelRef := ""
+	if model != nil {
+		modelRef = model.Provider + "/" + model.ID
+		if entry := m.catalog.Model(modelRef); entry != nil {
+			level = title.ResolveThinkingLevel(entry)
+		}
+	}
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		response, err := client.DoOK(ctx, rpc.GetMessages())
+		cancel()
+		if err != nil {
+			return titleMsg{err: err}
+		}
+		payload, err := rpc.DecodeTyped[rpc.MessagesPayload](response)
+		if err != nil {
+			return titleMsg{err: err}
+		}
+		transcript := title.Transcript(payload.Messages)
+		if transcript == "" {
+			return titleMsg{err: errors.New("nothing to title yet")}
+		}
+
+		genCtx, cancel := context.WithTimeout(context.Background(), title.Timeout)
+		defer cancel()
+		name, err := title.Generate(genCtx, title.Options{PiBin: bin, Model: modelRef, Thinking: level}, transcript)
+		if err != nil {
+			return titleMsg{err: err}
+		}
+
+		setCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		setResponse, err := client.DoOK(setCtx, rpc.SetSessionName(name))
+		return titleMsg{title: name, resp: setResponse, err: err}
 	}
 }
 

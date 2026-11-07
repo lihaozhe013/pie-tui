@@ -114,7 +114,8 @@ memory from other CLIs keeps working.
 | `/new` | | start a new session |
 | `/resume` | `/continue`, `/sessions` | resume another session |
 | `/compact` | `/compress` | compact the conversation |
-| `/name` | `/rename`, `/title` | rename this session |
+| `/name` | `/rename` | rename this session |
+| `/title` | | generate a title from the transcript with a one-shot model call |
 | `/export` | | export the session as HTML |
 | `/stats` | `/status`, `/usage` | show token and context usage |
 | `/clear` | `/cls` | clear the scrollback |
