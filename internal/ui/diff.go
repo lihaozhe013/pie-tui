@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 )
 
@@ -181,20 +180,4 @@ func diffBody(pairs []diffPair, limit int) (string, bool) {
 		}
 	}
 	return strings.Join(lines, "\n"), truncated
-}
-
-// parseLineNumber parses a diff prefix line number for headers.
-func parseLineNumber(value any) (int, bool) {
-	switch typed := value.(type) {
-	case float64:
-		return int(typed), true
-	case string:
-		parsed, err := strconv.Atoi(typed)
-		if err != nil {
-			return 0, false
-		}
-		return parsed, true
-	default:
-		return 0, false
-	}
 }

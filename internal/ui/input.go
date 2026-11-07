@@ -223,22 +223,3 @@ func builtinCommands() []completionItem {
 		{Value: "/quit", Detail: "exit pie-tui", Kind: "builtin", Builtin: true},
 	}
 }
-
-// mergeCommands combines built-ins with the commands pi reported.
-func mergeCommands(builtin []completionItem, remote []string, details map[string]completionItem) []completionItem {
-	items := append([]completionItem(nil), builtin...)
-	seen := make(map[string]bool, len(items))
-	for _, item := range items {
-		seen[item.Value] = true
-	}
-	for _, value := range remote {
-		if seen[value] {
-			continue
-		}
-		item := details[value]
-		item.Value = value
-		items = append(items, item)
-		seen[value] = true
-	}
-	return items
-}
