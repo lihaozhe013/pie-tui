@@ -64,6 +64,7 @@ type (
 		levels   []string
 		commands []rpc.CommandInfo
 		history  []rpc.Message
+		stats    rpc.SessionStats
 		err      error
 	}
 
@@ -129,6 +130,7 @@ type Model struct {
 	widget       []string
 	showThinking bool
 	expanded     bool
+	statsNotice  bool
 
 	busy         bool
 	frame        int
@@ -202,6 +204,9 @@ func (m *Model) handshake() tea.Cmd {
 			payload, _ := rpc.DecodeTyped[rpc.CommandsPayload](response)
 			msg.commands = payload.Commands
 		}
+		if response, err := client.DoOK(ctx, rpc.GetSessionStats()); err == nil {
+			msg.stats, _ = rpc.DecodeTyped[rpc.SessionStats](response)
+		}
 		if msg.state.MessageCount > 0 {
 			if response, err := client.DoOK(ctx, rpc.GetMessages()); err == nil {
 				payload, _ := rpc.DecodeTyped[rpc.MessagesPayload](response)
@@ -271,6 +276,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case statsMsg:
 		m.stats = msg.stats
+		if m.statsNotice {
+			m.statsNotice = false
+			m.addNotice(m.statsSummary())
+		}
 		return m, nil
 
 	case sessionListMsg:
@@ -322,6 +331,7 @@ func (m *Model) applyHandshake(msg handshakeMsg) (tea.Model, tea.Cmd) {
 	m.models = msg.models
 	m.levels = msg.levels
 	m.commands = msg.commands
+	m.stats = msg.stats
 	m.completion.SetItems(m.commandItems())
 	m.loadHistory(msg.history)
 
@@ -453,6 +463,21 @@ func (m *Model) bodyLines() []string {
 		lines = append(lines, "")
 	}
 	return lines
+}
+
+// statsSummary is the human readable /stats answer.
+func (m *Model) statsSummary() string {
+	stats := m.stats
+	summary := fmt.Sprintf("tokens %s · %d user / %d assistant · %d tool calls · $%.2f",
+		formatTokens(stats.Tokens.Total), stats.UserMessages, stats.AssistantMessages, stats.ToolCalls, stats.Cost)
+	if usage := stats.ContextUsage; usage != nil && usage.ContextWindow > 0 {
+		summary += fmt.Sprintf(" · context %s/%s (%.0f%%)",
+			formatTokens(usage.Tokens), formatTokens(usage.ContextWindow), usage.Percent)
+	}
+	if stats.SessionFile != "" {
+		summary += "\n" + stats.SessionFile
+	}
+	return summary
 }
 
 func (m *Model) renderHeader() string {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -589,7 +588,11 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 		m.transcript.Clear()
 		return nil, true
 	case "/help":
-		m.openOverlay(newPickerOverlay("help", "Key bindings and commands", m.helpItems()))
+		title := "Key bindings"
+		if m.opts.Version != "" {
+			title = "pie-tui " + m.opts.Version
+		}
+		m.openOverlay(newPickerOverlay("help", title, m.helpItems()))
 		return nil, true
 	case "/model":
 		if argument != "" {
@@ -610,6 +613,7 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 	case "/export":
 		return m.exportSession(), true
 	case "/stats":
+		m.statsNotice = true
 		return m.refreshStats(), true
 	case "/name":
 		if argument != "" {
@@ -1077,9 +1081,7 @@ func (m *Model) answerInput(value string) tea.Cmd {
 // addNotice appends an informational block.
 func (m *Model) addNotice(text string) {
 	m.transcript.Add(newBlock(blockNotice, text))
-	if m.transcript.AtBottom() || true {
-		m.transcript.ScrollToBottom()
-	}
+	m.transcript.ScrollToBottom()
 }
 
 // addError appends an error block and keeps it visible.
@@ -1152,5 +1154,3 @@ func formatDuration(d time.Duration) string {
 	}
 	return fmt.Sprintf("%.1fs", d.Seconds())
 }
-
-var _ = sort.Strings
