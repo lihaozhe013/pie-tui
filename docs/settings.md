@@ -45,6 +45,8 @@ Four sections share `models.json`, `settings.json`, `auth.json`,
   pattern that covers the changed model and keep `:level` pins and unmatched
   patterns intact.
 - Per-model thinking levels: `modelThinkingLevels` for the session model picker.
+- Per-model context windows: writes `providers.<id>.modelOverrides.<model>.contextWindow`
+  in `models.json`, keeping other override keys and removing empty objects.
 - Providers: credential state, `pi auth check` readiness, API keys, and custom
   providers and models with compatibility endpoints and costs.
 

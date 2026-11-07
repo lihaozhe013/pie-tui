@@ -152,6 +152,16 @@ func (m *Model) modelsSettingsTab() settingsTab {
 			},
 		},
 		settingsRow{
+			ID:    "context-windows",
+			Label: "Per-model context windows",
+			Help:  "Override a model's native context window in models.json.",
+			Kind:  settingsAction,
+			Run: func(m *Model, _ *settingsState) tea.Cmd {
+				m.openContextProvidersPanel()
+				return nil
+			},
+		},
+		settingsRow{
 			ID:    "thinking-levels",
 			Label: "Per-model thinking levels",
 			Help:  "Override the startup thinking level for individual models.",

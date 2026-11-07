@@ -274,3 +274,65 @@ func errEmpty(what string) error {
 type emptyError struct{ what string }
 
 func (e *emptyError) Error() string { return e.what + " is required" }
+
+// SetContextWindowOverride writes or clears one model's contextWindow override,
+// keeping every other key in the same overrides entry and removing empty
+// objects so an untouched models.json stays clean.
+func (m *ModelsFile) SetContextWindowOverride(providerID, modelID string, window *int) error {
+	if providerID == "" || modelID == "" {
+		return errEmpty("provider and model ids")
+	}
+	if window != nil && *window <= 0 {
+		return &TypeError{Path: m.path, Key: "contextWindow", Expected: "a positive token count", Got: KindNumber}
+	}
+	return m.Update(func(root *Value) error {
+		provider := EnsureProvider(root, providerID)
+		overrides := provider.Get("modelOverrides")
+		if overrides == nil || !overrides.IsObject() {
+			if window == nil {
+				return nil
+			}
+			overrides = NewObject()
+			provider.Set("modelOverrides", overrides)
+		}
+		entry := overrides.Get(modelID)
+		if entry == nil || !entry.IsObject() {
+			if window == nil {
+				return nil
+			}
+			entry = NewObject()
+			overrides.Set(modelID, entry)
+		}
+		if window == nil {
+			entry.Delete("contextWindow")
+			if entry.Len() == 0 {
+				overrides.Delete(modelID)
+			}
+			if overrides.Len() == 0 {
+				provider.Delete("modelOverrides")
+			}
+			return nil
+		}
+		entry.SetNumber("contextWindow", float64(*window))
+		return nil
+	})
+}
+
+// ContextWindowOverrides lists providerID/modelID keys that set a context
+// window in modelOverrides.
+func (m *ModelsFile) ContextWindowOverrides() map[string]int {
+	out := map[string]int{}
+	for _, providerID := range m.ProviderIDs() {
+		overrides := m.Provider(providerID).Get("modelOverrides")
+		if overrides == nil || !overrides.IsObject() {
+			continue
+		}
+		for _, modelID := range overrides.Keys() {
+			value := overrides.Get(modelID).Get("contextWindow")
+			if window, ok := value.AsInt(); ok && window > 0 {
+				out[providerID+"/"+modelID] = window
+			}
+		}
+	}
+	return out
+}
