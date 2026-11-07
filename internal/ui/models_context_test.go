@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -60,5 +61,27 @@ func TestContextWindowOverrideEditor(t *testing.T) {
 	entry = overrides["m"].(map[string]any)
 	if _, ok := entry["contextWindow"]; ok || entry["maxTokens"].(float64) != 77 {
 		t.Fatalf("cleared overrides = %v", entry)
+	}
+}
+
+func TestModelsTabShowsProjectShadow(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PI_CODING_AGENT_DIR", t.TempDir())
+	if err := os.MkdirAll(filepath.Join(dir, ".pi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".pi", "settings.json"), []byte(`{"enabledModels":["p/m"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := New(newFakeClient(), Options{CWD: dir})
+	tab := m.modelsSettingsTab()
+	var scope string
+	for _, row := range tab.Rows {
+		if row.ID == "project-scope" {
+			scope = row.Current()
+		}
+	}
+	if !strings.Contains(scope, "enabledModels") || !strings.Contains(scope, "project shadows") {
+		t.Fatalf("scope = %q", scope)
 	}
 }

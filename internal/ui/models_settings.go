@@ -172,6 +172,13 @@ func (m *Model) modelsSettingsTab() settingsTab {
 			},
 		},
 		settingsRow{
+			ID:      "project-scope",
+			Label:   "Project settings",
+			Kind:    settingsInfo,
+			Current: func() string { return m.projectModelScope() },
+			Help:    "A project .pi/settings.json key wins over the global value this panel edits.",
+		},
+		settingsRow{
 			ID:    "refresh-catalog",
 			Label: "Refresh model catalog",
 			Help:  "Runs `pi update --models`; new providers appear after it finishes.",
@@ -473,6 +480,27 @@ func (m *Model) providerEnabledCount(provider *modelcatalog.Provider) int {
 		}
 	}
 	return count
+}
+
+// projectModelScope names the project settings keys that shadow this panel.
+func (m *Model) projectModelScope() string {
+	if m.opts.CWD == "" {
+		return "global only"
+	}
+	project := m.projectSettings()
+	if project == nil {
+		return "none"
+	}
+	var keys []string
+	for _, key := range []string{"defaultProvider", "defaultModel", "defaultThinkingLevel", "enabledModels", "modelThinkingLevels"} {
+		if project.Root().Has(key) {
+			keys = append(keys, key)
+		}
+	}
+	if len(keys) == 0 {
+		return "none"
+	}
+	return "project shadows " + strings.Join(keys, ", ")
 }
 
 // openThinkingProvidersPanel lists providers for per-model level overrides.
