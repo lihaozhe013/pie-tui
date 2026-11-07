@@ -400,7 +400,8 @@ the full suite is not run.
 - Appearance fonts, font sizes, content width, and browser theme tiles: only a
   terminal palette and density mapping.
 - General language switching, PWA push, and web login/logout: not applicable.
-  Quote-selection and side-by-side diff become terminal equivalents only.
+  Quote-selection, transcript tool cards, and side-by-side diff become terminal
+  equivalents only: ctrl+o expands tool output and diffs in place.
 - Provider OAuth sign-in and subscription usage/quota: no RPC or CLI surface.
   The TUI shows stored credential state and directs the user to sign in with
   `pi` or Pie.
