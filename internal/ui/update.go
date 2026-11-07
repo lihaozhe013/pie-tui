@@ -33,7 +33,12 @@ func (m *Model) handleEvent(event rpc.Event) (tea.Model, tea.Cmd) {
 		m.layout()
 		m.finishStream()
 		m.transcript.MarkDirty()
-		return m, tea.Batch(m.waitEvent(), m.refreshStats())
+		commands := []tea.Cmd{m.waitEvent(), m.refreshStats()}
+		if m.autoTitlePending && !ev.Aborted && m.state.SessionName == "" {
+			m.autoTitlePending = false
+			commands = append(commands, m.generateAutoTitle())
+		}
+		return m, tea.Batch(commands...)
 
 	case *rpc.MessageStartEvent:
 		// Assistant content arrives through updates; user messages are added
@@ -629,6 +634,9 @@ func (m *Model) submit() tea.Cmd {
 		}
 	}
 
+	if m.state.SessionName == "" {
+		m.autoTitlePending = true
+	}
 	userBlock := newBlock(blockUser, text)
 	m.transcript.Add(userBlock)
 	m.pendingPrompt = userBlock
@@ -1006,6 +1014,15 @@ func (m *Model) exportSession() tea.Cmd {
 // generateTitle asks a one-shot model call to name the session from the
 // transcript, matching the web UI's auto-name action.
 func (m *Model) generateTitle() tea.Cmd {
+	return m.generateTitleCommand(false)
+}
+
+// generateAutoTitle names an unnamed session after its first settled turn.
+func (m *Model) generateAutoTitle() tea.Cmd {
+	return m.generateTitleCommand(true)
+}
+
+func (m *Model) generateTitleCommand(silent bool) tea.Cmd {
 	client := m.client
 	bin := m.opts.PiBin
 	model := m.state.Model
@@ -1023,28 +1040,28 @@ func (m *Model) generateTitle() tea.Cmd {
 		response, err := client.DoOK(ctx, rpc.GetMessages())
 		cancel()
 		if err != nil {
-			return titleMsg{err: err}
+			return titleMsg{err: err, silent: silent}
 		}
 		payload, err := rpc.DecodeTyped[rpc.MessagesPayload](response)
 		if err != nil {
-			return titleMsg{err: err}
+			return titleMsg{err: err, silent: silent}
 		}
 		transcript := title.Transcript(payload.Messages)
 		if transcript == "" {
-			return titleMsg{err: errors.New("nothing to title yet")}
+			return titleMsg{err: errors.New("nothing to title yet"), silent: silent}
 		}
 
 		genCtx, cancel := context.WithTimeout(context.Background(), title.Timeout)
 		defer cancel()
 		name, err := title.Generate(genCtx, title.Options{PiBin: bin, Model: modelRef, Thinking: level}, transcript)
 		if err != nil {
-			return titleMsg{err: err}
+			return titleMsg{err: err, silent: silent}
 		}
 
 		setCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		setResponse, err := client.DoOK(setCtx, rpc.SetSessionName(name))
-		return titleMsg{title: name, resp: setResponse, err: err}
+		return titleMsg{title: name, resp: setResponse, err: err, silent: silent}
 	}
 }
 

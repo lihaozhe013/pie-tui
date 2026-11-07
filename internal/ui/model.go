@@ -107,9 +107,10 @@ type (
 	}
 
 	titleMsg struct {
-		title string
-		resp  *rpc.Response
-		err   error
+		silent bool
+		title  string
+		resp   *rpc.Response
+		err    error
 	}
 
 	statsMsg struct{ stats rpc.SessionStats }
@@ -199,6 +200,8 @@ type Model struct {
 	// a command handled by an extension can take it back.
 	pendingPrompt     *block
 	pendingPromptText string
+	// autoTitlePending asks the first settled turn to name an unnamed session.
+	autoTitlePending bool
 
 	presetFile    *config.PresetFile
 	presetDraft   *presetDraft
@@ -609,6 +612,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.openSettingsAt("skills")
 
 	case titleMsg:
+		if msg.silent {
+			// Auto-naming is best-effort: failures stay out of the transcript.
+			return m, nil
+		}
 		if msg.err != nil {
 			m.addError("title: " + msg.err.Error())
 			return m, nil
@@ -634,6 +641,7 @@ func (m *Model) applyHandshake(msg handshakeMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.state = msg.state
+	m.autoTitlePending = false
 	m.models = msg.models
 	m.levels = msg.levels
 	m.commands = msg.commands

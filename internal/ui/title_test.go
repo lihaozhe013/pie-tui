@@ -31,3 +31,31 @@ func TestTitleIsItsOwnCommand(t *testing.T) {
 		t.Fatalf("/name = %+v, %v", target, ok)
 	}
 }
+
+func TestFirstTurnSchedulesASilentTitle(t *testing.T) {
+	model, _ := newTestModel(t)
+	model.state.SessionName = ""
+	model.composer.SetText("explain the bridge")
+	model.submit()
+	if !model.autoTitlePending {
+		t.Fatal("first prompt did not schedule a title")
+	}
+	updated, cmd := model.Update(eventMsg{event: &rpc.AgentSettledEvent{}})
+	model = updated.(*Model)
+	if model.autoTitlePending {
+		t.Fatal("title still pending after settle")
+	}
+	if cmd == nil {
+		t.Fatal("settle did not return commands")
+	}
+}
+
+func TestNamedSessionSkipsAutoTitle(t *testing.T) {
+	model, _ := newTestModel(t)
+	model.state.SessionName = "Named"
+	model.composer.SetText("next turn")
+	model.submit()
+	if model.autoTitlePending {
+		t.Fatal("named session scheduled a title")
+	}
+}
