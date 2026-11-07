@@ -560,3 +560,22 @@ func TestTogglesPersistPreferences(t *testing.T) {
 		t.Fatalf("thinking=%v expanded=%v", prefs.ShowThinking(), prefs.ExpandTools())
 	}
 }
+
+func TestNewAndResumeWaitForTheTurn(t *testing.T) {
+	model, client := newTestModel(t)
+	model.busy = true
+	before := len(client.commands)
+	model.composer.SetText("/new")
+	model.submit()
+	if len(client.commands) != before {
+		t.Fatalf("new session ran while busy: %v", client.commands[before:])
+	}
+	if !strings.Contains(model.toast, "before starting") {
+		t.Fatalf("toast = %q", model.toast)
+	}
+	model.composer.SetText("/resume")
+	model.submit()
+	if len(client.commands) != before {
+		t.Fatalf("resume ran while busy: %v", client.commands[before:])
+	}
+}

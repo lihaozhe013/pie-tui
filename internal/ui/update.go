@@ -763,8 +763,16 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 		}
 		return m.cycleThinking(), true
 	case "/new":
+		if m.busy {
+			m.setToast("stop the current turn before starting a new session")
+			return nil, true
+		}
 		return m.newSession(), true
 	case "/resume":
+		if m.busy {
+			m.setToast("stop the current turn before resuming another session")
+			return nil, true
+		}
 		return m.listSessions(), true
 	case "/compact":
 		return m.compact(argument), true
