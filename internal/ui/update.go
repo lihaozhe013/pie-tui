@@ -1224,15 +1224,15 @@ func (m *Model) refreshCommands() tea.Cmd {
 		defer cancel()
 		response, err := client.DoOK(ctx, rpc.GetCommands())
 		if err != nil {
-			return commandsMsg(nil)
+			return commandsMsg{err: err}
 		}
 		payload, err := rpc.DecodeTyped[struct {
 			Commands []rpc.CommandInfo `json:"commands"`
 		}](response)
 		if err != nil {
-			return commandsMsg(nil)
+			return commandsMsg{err: err}
 		}
-		return commandsMsg(payload.Commands)
+		return commandsMsg{commands: payload.Commands}
 	}
 }
 

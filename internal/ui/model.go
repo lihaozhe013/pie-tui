@@ -133,7 +133,10 @@ type (
 		err       error
 	}
 
-	commandsMsg []rpc.CommandInfo
+	commandsMsg struct {
+		commands []rpc.CommandInfo
+		err      error
+	}
 )
 
 // streamState accumulates one streaming assistant response.
@@ -534,7 +537,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.refreshState(), m.refreshCommands(), m.loadEntries(), m.loadToolSnapshot())
 
 	case commandsMsg:
-		m.commands = []rpc.CommandInfo(msg)
+		if msg.err != nil {
+			return m, nil
+		}
+		m.commands = msg.commands
 		m.bridgeReady = m.hasPiCommand("pie-tools")
 		m.goalAvailable = m.hasPiCommand("goal")
 		m.completion.SetItems(m.commandItems())

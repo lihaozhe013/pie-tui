@@ -65,14 +65,19 @@ func TestReloadKeepsSettingsOpen(t *testing.T) {
 
 func TestCommandsMsgRefreshesAvailability(t *testing.T) {
 	m := New(newFakeClient(), Options{})
-	updated, _ := m.Update(commandsMsg{{Name: "pie-tools"}, {Name: "goal"}})
+	updated, _ := m.Update(commandsMsg{commands: []rpc.CommandInfo{{Name: "pie-tools"}, {Name: "goal"}}})
 	m = updated.(*Model)
 	if !m.bridgeReady || !m.goalAvailable {
 		t.Fatalf("bridge=%v goal=%v", m.bridgeReady, m.goalAvailable)
 	}
-	updated, _ = m.Update(commandsMsg{{Name: "pie-tools"}})
+	updated, _ = m.Update(commandsMsg{commands: []rpc.CommandInfo{{Name: "pie-tools"}}})
 	m = updated.(*Model)
 	if m.goalAvailable {
 		t.Fatal("goal stayed available after the command disappeared")
+	}
+	updated, _ = m.Update(commandsMsg{err: errors.New("temporary")})
+	m = updated.(*Model)
+	if !m.bridgeReady {
+		t.Fatal("a failed refresh dropped the bridge")
 	}
 }
