@@ -160,7 +160,7 @@ func (m *Model) switchProject(dir string) tea.Cmd {
 		return nil
 	}
 	if m.opts.Restart == nil {
-		m.setToast("this build cannot restart pi; start pie-tui in that directory instead")
+		m.setToast("this build cannot restart pi; start pie in that directory instead")
 		return nil
 	}
 	if m.prefs != nil {

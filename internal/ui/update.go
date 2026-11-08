@@ -864,7 +864,7 @@ func (m *Model) runSlash(text string) (tea.Cmd, bool) {
 	case "/help":
 		title := "Key bindings"
 		if m.opts.Version != "" {
-			title = "pie-tui " + m.opts.Version
+			title = "pie " + m.opts.Version
 		}
 		m.openOverlay(newPickerOverlay("help", title, m.helpItems()))
 		return nil, true

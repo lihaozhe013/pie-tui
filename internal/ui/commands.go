@@ -2,7 +2,7 @@ package ui
 
 import "strings"
 
-// builtinCommand is one command pie-tui handles itself instead of forwarding to
+// builtinCommand is one command pie handles itself instead of forwarding to
 // pi. Aliases let the names users know from other CLIs work without duplicating
 // the dispatch code.
 type builtinCommand struct {
@@ -41,7 +41,7 @@ var builtinCommandTable = []builtinCommand{
 	{Name: "/clear", Detail: "clear the scrollback", Aliases: []string{"/cls"}},
 	{Name: "/mouse", Detail: "toggle mouse capture for native selection"},
 	{Name: "/help", Detail: "show key bindings", Aliases: []string{"/keys"}},
-	{Name: "/quit", Detail: "exit pie-tui", Aliases: []string{"/exit", "/q"}},
+	{Name: "/quit", Detail: "exit pie", Aliases: []string{"/exit", "/q"}},
 }
 
 // builtinTarget is the resolution result for a typed slash name.

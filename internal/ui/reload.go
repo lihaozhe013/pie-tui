@@ -20,7 +20,7 @@ func (m *Model) reloadPi() tea.Cmd {
 		return nil
 	}
 	if !m.bridgeReady {
-		m.setToast("bridge extension unavailable; restart pie-tui to reload")
+		m.setToast("bridge extension unavailable; restart pie to reload")
 		return nil
 	}
 	client := m.client

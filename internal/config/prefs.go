@@ -2,14 +2,14 @@ package config
 
 import "fmt"
 
-// TUIConfig is pie-tui's own preferences file. Anything both clients share
+// TUIConfig is pie's own preferences file. Anything both clients share
 // lives in pi's files instead; this holds only choices a browser does not have.
 type TUIConfig struct {
 	path string
 	root *Value
 }
 
-// LoadTUIConfig reads pie-tui-settings.json. A missing file reads as defaults.
+// LoadTUIConfig reads pie-settings.json. A missing file reads as defaults.
 func LoadTUIConfig(paths Paths) (*TUIConfig, error) {
 	doc, err := LoadObject(paths.TUIConfig())
 	if err != nil {

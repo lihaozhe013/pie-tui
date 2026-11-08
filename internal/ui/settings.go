@@ -619,7 +619,7 @@ func (m *Model) generalSettingsTab() settingsTab {
 		tab.Rows = append(tab.Rows, settingsRow{
 			ID:    "session-dir",
 			Label: "Session directory",
-			Help:  "Where pi stores session files. Blank uses the agent directory. Restart pie-tui to apply.",
+			Help:  "Where pi stores session files. Blank uses the agent directory. Restart pie to apply.",
 			Kind:  settingsText,
 			Current: func() string {
 				dir, ok, err := m.settings.SessionDir()
@@ -652,7 +652,7 @@ func (m *Model) generalSettingsTab() settingsTab {
 		tab.Rows = append(tab.Rows, settingsRow{
 			ID:    "bridge",
 			Label: "Bridge extension",
-			Help:  "Loaded from the pie-tui state directory; enables hot tool switching and reload.",
+			Help:  "Loaded from the pie state directory; enables hot tool switching and reload.",
 			Kind:  settingsInfo,
 			Current: func() string {
 				if m.bridgeReady {
@@ -682,7 +682,7 @@ func (m *Model) generalSettingsTab() settingsTab {
 		tab.Rows = append(tab.Rows, settingsRow{
 			ID:    "goal-enabled",
 			Label: "Goal controls",
-			Help:  "Requires the goal package: " + goalInstallHint + ". Install it, restart pie-tui, then enable this.",
+			Help:  "Requires the goal package: " + goalInstallHint + ". Install it, restart pie, then enable this.",
 			Kind:  settingsToggle,
 			Bool:  func() bool { return m.goalEnabled },
 			SetBool: func(on bool) error {

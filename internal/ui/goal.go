@@ -8,7 +8,7 @@ import (
 	"github.com/lihaozhe/pie-tui/internal/session"
 )
 
-// goalInstallHint is the manual install step pie-tui does not do for the user.
+// goalInstallHint is the manual install step pie does not do for the user.
 const goalInstallHint = "pi install npm:pi-better-goal"
 
 func isGoalLogEntry(entry session.LogEntry) bool {
@@ -34,7 +34,7 @@ func (m *Model) goalPanel() *settingsState {
 		tab.Rows = []settingsRow{
 			{ID: "goal-status", Label: "Status", Kind: settingsInfo, Current: func() string { return "unavailable" }},
 			{ID: "goal-install", Label: "Install", Kind: settingsInfo, Current: func() string { return goalInstallHint }},
-			{ID: "goal-restart", Label: "Then", Kind: settingsInfo, Current: func() string { return "restart pie-tui to load the extension" }},
+			{ID: "goal-restart", Label: "Then", Kind: settingsInfo, Current: func() string { return "restart pie to load the extension" }},
 		}
 		panel.tabs = []settingsTab{tab}
 		return panel
@@ -49,7 +49,7 @@ func (m *Model) goalPanel() *settingsState {
 			Kind:  settingsAction,
 			Run: func(m *Model, s *settingsState) tea.Cmd {
 				if m.prefs == nil {
-					s.err = "pie-tui-settings.json is unavailable"
+					s.err = "pie-settings.json is unavailable"
 					return nil
 				}
 				if err := m.prefs.SetGoalEnabled(true); err != nil {

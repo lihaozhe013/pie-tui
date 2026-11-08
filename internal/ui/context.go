@@ -32,7 +32,7 @@ func (m *Model) showContextPanel() {
 		tab.Rows = []settingsRow{
 			{ID: "context-bridge", Label: "Bridge", Kind: settingsInfo, Current: func() string { return "unavailable" }},
 			{ID: "context-hint", Label: "Why", Kind: settingsInfo, Current: func() string {
-				return "The system prompt and tool list are read through pie-tui's bridge extension."
+				return "The system prompt and tool list are read through pie's bridge extension."
 			}},
 		}
 	} else if m.toolSnapshot == nil {
@@ -66,7 +66,7 @@ func (m *Model) showContextPanel() {
 				return snapshot.WorkMode
 			}},
 			{ID: "context-view", Label: "View system prompt", Kind: settingsAction, Help: "Opens $PAGER on a temporary copy.", Run: func(m *Model, s *settingsState) tea.Cmd {
-				return m.viewText("pie-tui-system-prompt.md", snapshot.SystemPrompt)
+				return m.viewText("pie-system-prompt.md", snapshot.SystemPrompt)
 			}},
 			{ID: "context-refresh", Label: "Refresh", Kind: settingsAction, Run: func(m *Model, s *settingsState) tea.Cmd {
 				m.pendingContext = true
@@ -99,7 +99,7 @@ func (m *Model) viewText(name, text string) tea.Cmd {
 		m.setToast("nothing to show")
 		return nil
 	}
-	file, err := os.CreateTemp("", "pie-tui-*"+name)
+	file, err := os.CreateTemp("", "pie-*"+name)
 	if err != nil {
 		m.addError("temp file: " + err.Error())
 		return nil

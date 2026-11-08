@@ -1,4 +1,4 @@
-// Command pie-tui is a thin terminal client for the pi coding agent.
+// Command pie is a thin terminal client for the pi coding agent.
 //
 // It never embeds the agent: it starts the `pi` binary in RPC mode and speaks
 // newline-delimited JSON over stdin/stdout.
@@ -34,7 +34,7 @@ const (
 	exitMissing = 2
 
 	// binEnv overrides the pi executable path.
-	binEnv = "PI_TUI_PI"
+	binEnv = "PIE_PI"
 )
 
 type config struct {
@@ -62,11 +62,11 @@ func run(args []string, stderr io.Writer) int {
 		if errors.Is(err, flag.ErrHelp) {
 			return exitOK
 		}
-		fmt.Fprintf(stderr, "pie-tui: %v\n", err)
+		fmt.Fprintf(stderr, "pie: %v\n", err)
 		return exitMissing
 	}
 	if cfg.showVersion {
-		fmt.Fprintf(stderr, "pie-tui %s\n", version)
+		fmt.Fprintf(stderr, "pie %s\n", version)
 		return exitOK
 	}
 
@@ -78,7 +78,7 @@ func run(args []string, stderr io.Writer) int {
 
 	cwd, err := enterWorkingDir(cfg.cwd)
 	if err != nil {
-		fmt.Fprintf(stderr, "pie-tui: %v\n", err)
+		fmt.Fprintf(stderr, "pie: %v\n", err)
 		return exitFailure
 	}
 
@@ -111,7 +111,7 @@ func run(args []string, stderr io.Writer) int {
 		Logf:   logger.logf,
 	})
 	if err != nil {
-		fmt.Fprintf(stderr, "pie-tui: could not start %s: %v\n", piBinary, err)
+		fmt.Fprintf(stderr, "pie: could not start %s: %v\n", piBinary, err)
 		return exitFailure
 	}
 
@@ -169,7 +169,7 @@ func run(args []string, stderr io.Writer) int {
 func parseFlags(args []string, stderr io.Writer) (config, error) {
 	var cfg config
 
-	fs := flag.NewFlagSet("pie-tui", flag.ContinueOnError)
+	fs := flag.NewFlagSet("pie", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.StringVar(&cfg.bin, "pi", "", "path to the pi binary (default: $"+binEnv+" or pi on PATH)")
 	fs.StringVar(&cfg.provider, "provider", "", "provider passed to pi")
@@ -184,8 +184,8 @@ func parseFlags(args []string, stderr io.Writer) (config, error) {
 	fs.BoolVar(&cfg.showVersion, "version", false, "print the version and exit")
 
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "pie-tui %s - a thin terminal client for pi\n\n", version)
-		fmt.Fprintf(stderr, "usage: pie-tui [flags]\n\nflags:\n")
+		fmt.Fprintf(stderr, "pie %s - a thin terminal client for pi\n\n", version)
+		fmt.Fprintf(stderr, "usage: pie [flags]\n\nflags:\n")
 		fs.PrintDefaults()
 	}
 
@@ -274,12 +274,12 @@ func enterWorkingDir(dir string) (string, error) {
 }
 
 func printDependencyHelp(stderr io.Writer, err error) {
-	fmt.Fprintf(stderr, "pie-tui: %v\n\n", err)
-	fmt.Fprintln(stderr, "pie-tui is a host shell and needs the pi CLI installed:")
+	fmt.Fprintf(stderr, "pie: %v\n\n", err)
+	fmt.Fprintln(stderr, "pie is a host shell and needs the pi CLI installed:")
 	fmt.Fprintln(stderr, "  npm install -g @earendil-works/pi-coding-agent")
 	fmt.Fprintln(stderr, "")
 	fmt.Fprintln(stderr, "Point the client at a specific binary instead:")
-	fmt.Fprintf(stderr, "  pie-tui --pi /path/to/pi    (or set %s)\n", binEnv)
+	fmt.Fprintf(stderr, "  pie --pi /path/to/pi    (or set %s)\n", binEnv)
 }
 
 // debugLogger writes diagnostics to a file, never to stdout, because stdout is
@@ -303,21 +303,21 @@ func newLogger(enabled bool, stderr io.Writer) (*debugLogger, func()) {
 	}
 	path, err := logPath()
 	if err != nil {
-		fmt.Fprintf(stderr, "pie-tui: cannot resolve log directory: %v\n", err)
+		fmt.Fprintf(stderr, "pie: cannot resolve log directory: %v\n", err)
 		return &debugLogger{}, func() {}
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		fmt.Fprintf(stderr, "pie-tui: cannot create log directory: %v\n", err)
+		fmt.Fprintf(stderr, "pie: cannot create log directory: %v\n", err)
 		return &debugLogger{}, func() {}
 	}
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
-		fmt.Fprintf(stderr, "pie-tui: cannot open log file: %v\n", err)
+		fmt.Fprintf(stderr, "pie: cannot open log file: %v\n", err)
 		return &debugLogger{}, func() {}
 	}
 	logger := &debugLogger{file: file}
-	logger.logf("pie-tui %s started", version)
-	fmt.Fprintf(stderr, "pie-tui: logging to %s\n", path)
+	logger.logf("pie %s started", version)
+	fmt.Fprintf(stderr, "pie: logging to %s\n", path)
 	return logger, func() { _ = file.Close() }
 }
 
@@ -330,7 +330,7 @@ func stateDir() (string, error) {
 		}
 		base = filepath.Join(home, ".local", "state")
 	}
-	return filepath.Join(base, "pie-tui"), nil
+	return filepath.Join(base, "pie"), nil
 }
 
 func logPath() (string, error) {
@@ -338,5 +338,5 @@ func logPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "pie-tui.log"), nil
+	return filepath.Join(dir, "pie.log"), nil
 }

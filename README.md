@@ -1,15 +1,15 @@
-# pie-tui
+# pie
 
 A thin terminal client for the [`pi`](https://github.com/earendil-works/pi) coding
 agent, written in Go with [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 
-`pie-tui` is a host shell only. It contains no TypeScript or Node.js SDK: it starts
+`pie` is a host shell only. It contains no TypeScript or Node.js SDK: it starts
 the globally installed `pi` binary in RPC mode and talks to it over JSONL on
 stdin/stdout. The agent owns the conversation, tools, sessions, and providers; the
 client owns pixels and keys.
 
 ```
-pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host binary)
+pie (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host binary)
 ```
 
 ## Features
@@ -100,7 +100,7 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
   `pi mcp add`, and signs in, signs out, or removes through the same CLI
 - Goal controls through a manually installed goal package: `/goal` shows the
   status, objective, token usage, and the start, pause, resume, complete, and
-  clear actions; the header carries the status. `pie-tui` never bundles the
+  clear actions; the header carries the status. `pie` never bundles the
   package. Enable the panel in Settings › General after installing
   `pi-better-goal`; enabling it without the package is refused with the install
   command
@@ -115,7 +115,7 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
 
 ## Requirements
 
-- `pi` 1.5.0 or newer on `PATH` (or `--pi /path/to/pi`, or `PI_TUI_PI`)
+- `pi` 1.5.0 or newer on `PATH` (or `--pi /path/to/pi`, or `PIE_PI`)
 - Go 1.24 or newer to build
 
 ## Install
@@ -123,25 +123,25 @@ pie-tui (Go, Bubble Tea)  ⇄  stdin/stdout JSONL  ⇄  pi --mode rpc (host bina
 ```bash
 git clone <this repo> && cd pie-tui
 make build
-./bin/pie-tui
+./bin/pie
 ```
 
-Install on `PATH`:
+Install on `PATH` as `pie`:
 
 ```bash
-go install ./cmd/pi-tui
+make install
 ```
 
 ## Usage
 
 ```bash
-pie-tui                       # resume is offered from the picker
-pie-tui --model anthropic/claude-sonnet-4
-pie-tui --no-session          # ephemeral, nothing is written to disk
-pie-tui --session ~/.pi/agent/sessions/--Users-me-proj--/2024_x.jsonl
-pie-tui --cwd ~/src/project   # start in another working directory
-pie-tui --no-mouse            # let the terminal handle selection natively
-pie-tui --debug               # protocol log in ~/.local/state/pie-tui/
+pie                           # resume is offered from the picker
+pie --model anthropic/claude-sonnet-4
+pie --no-session              # ephemeral, nothing is written to disk
+pie --session ~/.pi/agent/sessions/--Users-me-proj--/2024_x.jsonl
+pie --cwd ~/src/project       # start in another working directory
+pie --no-mouse                # let the terminal handle selection natively
+pie --debug                   # protocol log in ~/.local/state/pie/
 ```
 
 The agent directory is `PI_CODING_AGENT_DIR` when set, otherwise
@@ -154,7 +154,7 @@ Mouse capture is on by default. `shift+drag` uses the terminal's native
 selection, and `/mouse` toggles capture. Clicking inside the composer places
 the caret, and dragging there copies the highlighted prompt text on release. In
 tmux, OSC52 copying needs `set-clipboard on`; the platform clipboard command is
-the fallback when `pie-tui` runs locally.
+the fallback when `pie` runs locally.
 
 ## Key bindings
 
@@ -214,7 +214,7 @@ memory from other CLIs keeps working.
 | `/clear` | `/cls` | clear the scrollback |
 | `/mouse` | | toggle mouse capture; off leaves selection to the terminal |
 | `/help` | `/keys` | show key bindings and commands |
-| `/quit` | `/exit`, `/q` | exit pie-tui |
+| `/quit` | `/exit`, `/q` | exit pie |
 
 Anything else starting with `/` is forwarded to pi unchanged, so extension
 commands, prompt templates, and skills (`/skill:name`) work as they do in the
@@ -234,7 +234,7 @@ end of a run), the rendering budget, and the shutdown escalation.
 make test                     # unit tests, includes a compiled fake pi
 make vet
 go test -race ./...
-PI_TUI_E2E_BIN=$(command -v pi) go test ./internal/rpc -run TestRealPi -v
+PIE_E2E_BIN=$(command -v pi) go test ./internal/rpc -run TestRealPi -v
 ```
 
 ## License

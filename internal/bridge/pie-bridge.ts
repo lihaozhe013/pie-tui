@@ -1,9 +1,9 @@
-// pie-tui bridge extension.
+// pie bridge extension.
 //
-// pie-tui loads this file with `pi -e`. It supplies the runtime commands the
+// pie loads this file with `pi -e`. It supplies the runtime commands the
 // RPC protocol does not expose: hot tool switching, work-mode entries, reload,
 // and a tool/system-prompt snapshot for the settings UI. The entry shapes match
-// pie's web UI exactly, so a session moved between the clients keeps its tool
+// Pie's web UI exactly, so a session moved between the clients keeps its tool
 // selection and its Plan mode.
 //
 // This file is plain JavaScript with a .ts extension: pi transpiles extensions,
@@ -129,7 +129,7 @@ export default function (pi) {
   });
 
   pi.registerCommand("pie-tools", {
-    description: "Apply a tool selection (pie-tui internal)",
+    description: "Apply a tool selection (pie internal)",
     handler: async (args, ctx) => {
       const text = String(args || "").trim();
       if (text === "" || text === "configured") {
@@ -154,7 +154,7 @@ export default function (pi) {
   });
 
   pi.registerCommand("pie-mode", {
-    description: "Set the pie work mode (pie-tui internal)",
+    description: "Set the work mode (pie internal)",
     handler: async (args) => {
       const text = String(args || "").trim();
       const mode = text === "plan" || text === "autonomous" || text === "orchestrator" ? text : null;
@@ -163,14 +163,14 @@ export default function (pi) {
   });
 
   pi.registerCommand("pie-reload", {
-    description: "Reload pi resources (pie-tui internal)",
+    description: "Reload pi resources (pie internal)",
     handler: async (_args, ctx) => {
       await ctx.reload();
     },
   });
 
   pi.registerCommand("pie-publish", {
-    description: "Write a tool and prompt snapshot (pie-tui internal)",
+    description: "Write a tool and prompt snapshot (pie internal)",
     handler: async (args, ctx) => {
       const path = String(args || "").trim();
       if (!path || path.includes("\n")) {

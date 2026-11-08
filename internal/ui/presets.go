@@ -311,7 +311,7 @@ func (m *Model) loadToolSnapshot() tea.Cmd {
 	}
 	client := m.client
 	return func() tea.Msg {
-		dir, err := os.MkdirTemp("", "pie-tui-snapshot-*")
+		dir, err := os.MkdirTemp("", "pie-snapshot-*")
 		if err != nil {
 			return snapshotMsg{err: err}
 		}

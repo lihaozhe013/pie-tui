@@ -19,7 +19,7 @@ const (
 	AgentsName        = "AGENTS.md"
 	PresetsName       = "pie-tool-presets.json"
 	ModelSettingsName = "pie-model-settings.json"
-	TUIConfigName     = "pie-tui-settings.json"
+	TUIConfigName     = "pie-settings.json"
 )
 
 const (

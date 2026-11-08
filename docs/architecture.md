@@ -1,6 +1,6 @@
 # Architecture
 
-`pie-tui` is a host shell. It never embeds or reimplements the agent: the whole
+`pie` is a host shell. It never embeds or reimplements the agent: the whole
 conversation, tool execution, session storage, and provider access live in the
 `pi` binary. This document describes the boundary, the modules, and the rules the
 code must keep to stay a thin client.
@@ -8,8 +8,8 @@ code must keep to stay a thin client.
 ## Process boundary
 
 ```
-┌──────────────────── pie-tui (Go) ────────────────────┐      ┌──────── pi (binary) ────────┐
-│ cmd/pi-tui   flags · dependency check · shutdown      │      │                             │
+┌──────────────────── pie (Go) ────────────────────────┐      ┌──────── pi (binary) ────────┐
+│ cmd/pie      flags · dependency check · shutdown      │      │                             │
 │                                                       │      │  agent loop · tools         │
 │ internal/rpc  Client ── stdin  (JSONL commands) ──────┼─────▶│  providers · sessions       │
 │                 │   ◀── stdout (JSONL events) ────────┼──────│  extensions                 │
@@ -22,7 +22,7 @@ code must keep to stay a thin client.
 Rules that keep the client thin:
 
 - No TypeScript or Node.js dependency. `go.mod` only lists Go modules.
-- `pi` is discovered with `exec.LookPath` (`--pi` or `PI_TUI_PI` override).
+- `pi` is discovered with `exec.LookPath` (`--pi` or `PIE_PI` override).
 - stdout is protocol only. Anything the UI needs to log goes to a file (`--debug`)
   or to the child's stderr tail kept for crash reports.
 - The client keeps a *projection* of the session, never the source of truth. Every
@@ -181,7 +181,7 @@ file-name matcher walks every registered pattern.
 
 ## Configuration and the bridge
 
-`pie-tui` and Pie share every file in pi's agent directory
+`pie` and Pie share every file in pi's agent directory
 (`PI_CODING_AGENT_DIR`, default `~/.pi/agent`):
 
 - `settings.json`, `models.json`, `auth.json`, `mcp.json`, and `AGENTS.md` are
@@ -189,7 +189,7 @@ file-name matcher walks every registered pattern.
 - `pie-model-settings.json`, `pie-tool-presets.json`, and the session log's
   `pie:tool-selection` / `pie:work-mode` entries are Pie's files; the TUI reads
   and writes the same shapes.
-- `pie-tui-settings.json` holds terminal-only choices: theme, thinking-block
+- `pie-settings.json` holds terminal-only choices: theme, thinking-block
   visibility, tool expansion, the last working directory, and the last preset
   to seed a new session.
 
@@ -209,7 +209,7 @@ UI reports `unavailable` in Settings › General and refuses preset changes
 rather than silently diverging.
 
 `pi --mode rpc` does not persist the model or thinking level it changes, so
-`pie-tui` writes them itself: picking a model updates `defaultProvider` and
+`pie` writes them itself: picking a model updates `defaultProvider` and
 `defaultModel`, and a thinking-level change updates the current model's
 `modelThinkingLevels` entry. pi then starts the next session on that model and
 level, while a resumed session restores the pair recorded in its own log. The
@@ -257,7 +257,7 @@ starts a fresh pi with the same binary, flags, and bridge extension but no
 folder; the old transcript is not carried over. A stale `closed` event from the
 replaced child is ignored by comparing the client identity. Recent projects are
 derived from the `cwd` in session headers rather than a second index, and
-`pie-tui-settings.json` keeps the last choice only to seed the browser; the
+`pie-settings.json` keeps the last choice only to seed the browser; the
 process's own directory stays the default when no `--cwd` is given.
 
 MCP servers are read from the agent's `mcp.json` and the project's
@@ -308,7 +308,7 @@ retracts it. The `/goal` command opens a panel that only sends `/goal …`
 prompts to the installed package, which owns continuations and completion. The
 package is never bundled: availability is the `goal` command reported by
 `get_commands`, and the terminal-only `goalEnabled` preference refuses to turn
-on without it. `pie-tui` writes no goal state of its own, so a goal started in
+on without it. `pie` writes no goal state of its own, so a goal started in
 Pie appears in the header here and the reverse.
 
 Settings › Models merges three sources without a second cache:
@@ -345,15 +345,15 @@ block, and refuses to send more commands.
   oversized records, child crashes, request timeouts, slow consumers, graceful
   close, and SIGTERM escalation. The test binary itself is not used as the fake:
   modern Go testing captures `os.Stdout`, which delays protocol writes.
-- `internal/rpc/e2e_test.go` runs against a real pi when `PI_TUI_E2E_BIN` is set.
-  `PI_TUI_E2E_PROMPT=1` adds one model round trip.
+- `internal/rpc/e2e_test.go` runs against a real pi when `PIE_E2E_BIN` is set.
+  `PIE_E2E_PROMPT=1` adds one model round trip.
 - `internal/ui/*_test.go` drives the model with a fake client, so key handling,
   streaming, dialogs, and rendering are tested without a terminal.
 
 ```bash
 make test
 go test -race ./...
-PI_TUI_E2E_BIN=$(command -v pi) go test ./internal/rpc -run TestRealPi -v
+PIE_E2E_BIN=$(command -v pi) go test ./internal/rpc -run TestRealPi -v
 ```
 
 ## Known limitations

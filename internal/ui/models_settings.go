@@ -60,7 +60,7 @@ func (m *Model) modelsSettingsTab() settingsTab {
 	tab.Rows = append(tab.Rows, settingsRow{
 		ID:    "default-provider",
 		Label: "Default provider",
-		Help:  "Applies when pie-tui starts; Pie applies it to its new sessions.",
+		Help:  "Applies when pie starts; Pie applies it to its new sessions.",
 		Kind:  settingsChoice,
 		Current: func() string {
 			provider, _ := m.settings.DefaultProvider()
@@ -81,7 +81,7 @@ func (m *Model) modelsSettingsTab() settingsTab {
 	tab.Rows = append(tab.Rows, settingsRow{
 		ID:    "default-model",
 		Label: "Default model",
-		Help:  "Applies when pie-tui starts; Pie applies it to its new sessions.",
+		Help:  "Applies when pie starts; Pie applies it to its new sessions.",
 		Kind:  settingsChoice,
 		Current: func() string {
 			provider, _ := m.settings.DefaultProvider()
@@ -112,7 +112,7 @@ func (m *Model) modelsSettingsTab() settingsTab {
 	tab.Rows = append(tab.Rows, settingsRow{
 		ID:      "default-thinking",
 		Label:   "Default thinking level",
-		Help:    "Applies when pie-tui starts; Pie applies it to its new sessions.",
+		Help:    "Applies when pie starts; Pie applies it to its new sessions.",
 		Kind:    settingsChoice,
 		Current: func() string { level, _ := m.settings.DefaultThinkingLevel(); return level },
 		Choices: thinkingLevelChoices(false),

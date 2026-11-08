@@ -1,4 +1,4 @@
-// Package ui is the Bubble Tea front end of pie-tui. It renders events produced
+// Package ui is the Bubble Tea front end of pie. It renders events produced
 // by the rpc client and turns keyboard input into JSONL commands; it holds no
 // conversation logic of its own.
 package ui
@@ -253,7 +253,7 @@ type Model struct {
 	projectTrusted bool
 	trustErr       error
 
-	// bridgeReady reports whether pi loaded pie-tui's bridge extension, which
+	// bridgeReady reports whether pi loaded pie's bridge extension, which
 	// provides hot tool switching, work modes, and reload.
 	bridgeReady bool
 
@@ -1071,7 +1071,7 @@ func (m *Model) scheduleTick() tea.Cmd {
 // View implements tea.Model.
 func (m *Model) View() string {
 	if !m.ready {
-		return m.styles.muted.Render("starting pie-tui…")
+		return m.styles.muted.Render("starting pie…")
 	}
 
 	lines := make([]string, 0, m.height)
@@ -1148,7 +1148,7 @@ func (m *Model) bodyLines() []string {
 }
 
 func (m *Model) renderHeader() string {
-	title := m.styles.header.Render("pie-tui")
+	title := m.styles.header.Render("pie")
 	segments := []string{title}
 
 	// The working directory identifies the session group, so show it up front.

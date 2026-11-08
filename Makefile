@@ -1,4 +1,5 @@
-BINARY := pie-tui
+BINARY := pie
+CMD := ./cmd/pie
 PKG := ./...
 GO ?= go
 
@@ -7,7 +8,7 @@ GO ?= go
 all: build
 
 build:
-	$(GO) build -trimpath -o bin/$(BINARY) ./cmd/pi-tui
+	$(GO) build -trimpath -o bin/$(BINARY) $(CMD)
 
 test:
 	$(GO) test $(PKG)
@@ -26,7 +27,7 @@ lint: vet
 	gofmt -l -s .
 
 install:
-	$(GO) install ./cmd/pi-tui
+	$(GO) install $(CMD)
 
 clean:
 	rm -rf bin dist coverage.out

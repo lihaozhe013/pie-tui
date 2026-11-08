@@ -1,6 +1,7 @@
 // Package config reads and writes pi's shared configuration files.
 //
-// Both pie and pie-tui edit the same files in the agent directory, so every
+// Both the web UI and the terminal client edit the same files in the agent
+// directory, so every
 // write here is minimal, atomic, locked, and private (0600). Documents keep
 // object member order, so saving a file does not reshuffle keys the user wrote
 // and unknown keys survive a round trip.

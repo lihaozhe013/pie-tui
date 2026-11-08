@@ -307,6 +307,6 @@ func (m *Model) applyPluginAction(msg pluginActionMsg) (tea.Model, tea.Cmd) {
 		m.addError("package: " + msg.err.Error())
 		return m, m.openSettingsAt("plugins")
 	}
-	m.setToast(msg.summary + " · restart pie-tui to load it")
+	m.setToast(msg.summary + " · restart pie to load it")
 	return m, m.openSettingsAt("plugins")
 }

@@ -17,9 +17,9 @@ TUI never drops JSON keys it does not understand.
 | Agent directory | read-only | `PI_CODING_AGENT_DIR` or `~/.pi/agent`. |
 | Settings file | read-only | The agent `settings.json` in use. |
 | Bridge extension | read-only | `ready` when pi advertises `pie-tools`. |
-| Thinking blocks | `pie-tui-settings.json` | TUI-only visibility default. |
-| Goal controls | `pie-tui-settings.json` | Enabling requires the `pi-better-goal` package. |
-| Expand tool output | `pie-tui-settings.json` | Same as `ctrl+o`. |
+| Thinking blocks | `pie-settings.json` | TUI-only visibility default. |
+| Goal controls | `pie-settings.json` | Enabling requires the `pi-better-goal` package. |
+| Expand tool output | `pie-settings.json` | Same as `ctrl+o`. |
 | Reload pi | session prompt `/pie-reload` | Rereads settings and instructions; needs the bridge. |
 
 ## Instructions
@@ -63,7 +63,7 @@ larger native window is shown as the cap size, as in Pie.
 - Current applies `defaultTools` through the bridge. Presets are the built-in
   configured, plan, chat-only, read-only, default, and full sets plus custom
   entries from `pie-tool-presets.json`. The last applied preset is stored in
-  `pie-tui-settings.json` (`toolPreset`) and reapplied to a new session; a
+  `pie-settings.json` (`toolPreset`) and reapplied to a new session; a
   resumed session keeps the selection recorded in its own log.
 - Code mode: automatic or always writes `+codemode` into `defaultTools` with the
   smallest edit; code-mode tools choose `on` or `only`; the inline result budget
@@ -108,7 +108,7 @@ it.
 
 ## Terminal-only preferences
 
-`pie-tui-settings.json` holds choices a browser does not have: `theme`,
+`pie-settings.json` holds choices a browser does not have: `theme`,
 `enterToSend`, `goalEnabled`, `lastCwd`, `toolPreset`, `showThinking`, and
 `expandTools`. `toolPreset` seeds a new session with the last preset chosen in
 the terminal; everything shared stays in pi's files. Model and thinking-level

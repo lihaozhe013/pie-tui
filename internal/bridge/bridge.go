@@ -1,4 +1,4 @@
-// Package bridge ships the extension that gives pie-tui the runtime commands
+// Package bridge ships the extension that gives pie the runtime commands
 // pi's RPC mode does not expose.
 package bridge
 

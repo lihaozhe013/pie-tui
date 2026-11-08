@@ -1,6 +1,6 @@
 # Pie Web UI Parity Plan
 
-This document plans the work that brings `pie-tui` to feature parity with the Pie
+This document plans the work that brings `pie` to feature parity with the Pie
 web UI (`/Users/lihaozhe/dev/pie`), excluding the task workspace and drag-and-drop
 attachments. It records the assessment, the shared configuration contract, the
 runtime gaps and their agreed solutions, and a phased implementation order.
@@ -11,7 +11,7 @@ bridge-extension approach in section 6.4 is what shipped.
 
 ## 1. Goal
 
-`pie-tui` must offer the same conversation features and the same configuration
+`pie` must offer the same conversation features and the same configuration
 surfaces as Pie, and must read and write the same files in the same agent
 directory. A change made in one client is visible in the other.
 
@@ -56,7 +56,7 @@ directory. A change made in one client is visible in the other.
 
 ### 3.1 Pie's three layers
 
-| Layer | How Pie does it | What pie-tui can do |
+| Layer | How Pie does it | What pie can do |
 | --- | --- | --- |
 | Agent runtime | In-process SDK plus Pie's own command adapter (`lib/rpc-manager.ts`) | Partly. `pi --mode rpc` exposes fewer commands than the SDK. |
 | Configuration and resources | Direct file access, plus SDK resource loaders | Fully. The TUI reads and writes the same files. |
@@ -66,7 +66,7 @@ The web UI's extra runtime commands are `set_tools`, `reload`, tool inventory,
 system-prompt reads, and title generation. Pi's RPC mode (1.5.0) has none of
 them; the TUI must supply its own channels (section 6).
 
-### 3.2 pie-tui today
+### 3.2 pie today
 
 - RPC client, streaming transcript, tool rendering, diffs, thinking blocks.
 - Model picker, thinking cycling, session rename/resume/new, compaction, HTML
@@ -82,7 +82,7 @@ them; the TUI must supply its own channels (section 6).
 
 Sizes: S under a day-equivalent, M a day-equivalent, L several, XL the largest.
 
-| Area | Pie reference | pie-tui today | Approach | Size |
+| Area | Pie reference | pie today | Approach | Size |
 | --- | --- | --- | --- | --- |
 | Settings shell | `components/SettingsPanel.tsx`, `lib/settings-navigation.ts`, `lib/settings-search.ts` | none | Modal with tab rail, detail pane, field widgets, search | L |
 | General | `components/SettingsPanel.tsx` (`GeneralSettings`) | none | `settings.json` plus TUI preferences | S |
@@ -131,7 +131,7 @@ The TUI must use this one root for every path and must not keep a second copy.
 | `models-store.json` | Provider model catalog cache | Read; refresh through `pi update --models` |
 | `pie-session-state.json` | Sidebar pins, archive, project order and names | Optional read later; not required for parity targets |
 | Session `.jsonl` entries | `pie:tool-selection`, `pie:work-mode`, goal entries | Read; write through the bridge extension |
-| `pie-tui-settings.json` | TUI-only preferences: theme, send key, goal enabled, last working directory | Read/write (new file) |
+| `pie-settings.json` | TUI-only preferences: theme, send key, goal enabled, last working directory | Read/write (new file) |
 
 The TUI-only file exists because a terminal has preferences a browser does not.
 Everything the two clients genuinely share stays in Pi's files.
@@ -257,7 +257,7 @@ the full suite is not run.
 - `internal/session`: honor the agent directory and `settings.json`
   `sessionDir`; expose session metadata (name, cwd, tool selection, work mode,
   goal facts) parsed from entries.
-- `cmd/pi-tui`: agent-dir wiring, `--cwd`, restart support in the RPC client.
+- `cmd/pie`: agent-dir wiring, `--cwd`, restart support in the RPC client.
 - Acceptance: building and opening a session writes nothing; a save round-trips
   every shared file without dropping unknown keys; corrupt-file behavior is
   covered by tests.
@@ -350,7 +350,7 @@ the full suite is not run.
   budget; treat unknown statuses as waiting; expose start, pause, resume,
   complete, clear mapped to `/goal ...` prompts.
 - Availability is the `goal` command reported by `get_commands`.
-- Preference `goal.enabled` in `pie-tui-settings.json`. Enabling it without the
+- Preference `goal.enabled` in `pie-settings.json`. Enabling it without the
   extension is refused with install instructions
   (`pi install npm:pi-better-goal`); no partial state is written.
 - Goal panel: status, objective (locked while running), token usage and budget,
@@ -452,6 +452,6 @@ the full suite is not run.
 - The bridge extension is included and loaded with `-e`; it is the primary
   mechanism for tool switching, reload, Plan mode, and publishing tool and
   system-prompt snapshots. Restart and CLI fallbacks remain.
-- The TUI keeps one extra preferences file, `pie-tui-settings.json`, for
+- The TUI keeps one extra preferences file, `pie-settings.json`, for
   terminal-only choices. All shared configuration stays in Pi's files.
 - Tasks, orchestration, and drag-and-drop are excluded.
